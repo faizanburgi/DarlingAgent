@@ -13,6 +13,19 @@ export type ApprovalStatus = "pending" | "approved" | "rejected" | "expired";
 
 export interface EventRequest {
   title: string;
+  eventType?: string;
+  description?: string;
+  organizer?: string;
+  date?: string;
+  startTime?: string;
+  endTime?: string;
+  timezone?: string;
+  location?: string;
+  venue?: string;
+  targetAudience?: string;
+  requirements?: string[];
+  constraints?: string[];
+  deliverables?: string[];
   attendeeCount?: number;
   budgetLimit?: number;
   currency?: string;

@@ -1,3 +1,4 @@
+import { structuredEventSchema } from "../../core/structured-event.js";
 import { McpServer } from "@modelcontextprotocol/server";
 import { serveStdio } from "@modelcontextprotocol/server/stdio";
 import { z } from "zod";
@@ -52,6 +53,11 @@ function registerTools(server: McpServer, service: EventApplicationService, regi
     title: "Create persistent event", description: "Mutation: create a persistent draft planning workflow from an event brief.",
     inputSchema: z.object({ eventId: id, eventBrief: text("eventBrief") })
   }, async ({ eventId, eventBrief }) => result(await service.createEvent(eventId, eventBrief), "Event created."));
+
+  server.registerTool("event_create_structured", {
+    title: "Persist WorkBuddy event plan", description: "WorkBuddy interprets the brief and supplies event facts, itemized costs and assumptions. Backend validates and persists; never implies external execution.",
+    inputSchema: structuredEventSchema.extend({ eventId: id })
+  }, async ({ eventId, ...input }) => result(await service.createStructuredEvent(eventId, input), "Event plan persisted."));
 
   server.registerTool("event_get", {
     title: "Get event", description: "Read-only: retrieve an event workflow and current event summary.", inputSchema: z.object({ eventId: id })

@@ -134,6 +134,7 @@ export class SqlitePersistence {
       CREATE INDEX IF NOT EXISTS validations_event_id_idx ON validations(event_id);
       CREATE TABLE IF NOT EXISTS registration_forms (id TEXT PRIMARY KEY, revision INTEGER NOT NULL CHECK (revision >= 0), event_id TEXT NOT NULL REFERENCES events(id) ON DELETE RESTRICT, tally_form_id TEXT NOT NULL, form_url TEXT NOT NULL, status TEXT NOT NULL CHECK (status IN ('live', 'unverified')), spec_hash TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
       CREATE INDEX IF NOT EXISTS registration_forms_event_id_idx ON registration_forms(event_id);
+      CREATE TABLE IF NOT EXISTS registration_creation_intents (event_id TEXT PRIMARY KEY REFERENCES events(id), registration_id TEXT NOT NULL UNIQUE, created_at TEXT NOT NULL);
     `);
   }
 
@@ -269,6 +270,7 @@ export class SqlitePersistence {
 
   private createRegistrationFormRepository(): import("../../core/ports/persistence.js").RegistrationFormRepository {
     return {
+      reserveCreation: async (eventId, registrationId) => this.database.prepare("INSERT OR IGNORE INTO registration_creation_intents VALUES (?, ?, ?)").run(eventId, registrationId, new Date().toISOString()).changes === 1,
       get: async (id) => mapRegistrationForm(this.database.prepare("SELECT id, revision, event_id, tally_form_id, form_url, status, spec_hash, created_at, updated_at FROM registration_forms WHERE id = ?").get(id) as RegistrationFormRow | undefined),
       listByEvent: async (eventId) => (this.database.prepare("SELECT id, revision, event_id, tally_form_id, form_url, status, spec_hash, created_at, updated_at FROM registration_forms WHERE event_id = ? ORDER BY id").all(eventId) as RegistrationFormRow[]).map(mapRegistrationForm).filter((record): record is PersistedRegistrationForm => record !== undefined),
       create: async (record) => this.createRecord(record, "INSERT INTO registration_forms (id, revision, event_id, tally_form_id, form_url, status, spec_hash, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", [record.id, record.revision, record.eventId, record.tallyFormId, record.formUrl, record.status, record.specHash, record.createdAt, record.updatedAt]),
