@@ -10,14 +10,18 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "test": "npm run build && node --test dist/tests/**/*.test.js",
-    "demo": "npm run build && node dist/scripts/run-demo.js"
+    "demo": "npm run build && node dist/scripts/run-demo.js",
+    "mcp": "npm run build && node dist/scripts/run-mcp.js"
   },
   "devDependencies": {
+    "@modelcontextprotocol/client": "2.3.1",
     "@types/better-sqlite3": "^9.6.0",
     "@types/node": "^22.10.2",
     "typescript": "^5.7.3"
   },
   "dependencies": {
-    "better-sqlite3": "^13.0.3"
+    "@modelcontextprotocol/server": "2.3.1",
+    "better-sqlite3": "^13.0.3",
+    "zod": "4.6.5"
   }
 }

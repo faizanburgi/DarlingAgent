@@ -32,6 +32,18 @@ The demo writes two local **draft** artifacts into `artifacts/`:
 
 The local runner is a reproducible deterministic reference implementation. It is not evidence that WorkBuddy has run. Native execution must be validated manually using [the WorkBuddy package README](packages/workbuddy-team/README.md).
 
+## Local MCP server
+
+The local stdio MCP adapter exposes the persistent application service; it does not run an autonomous agent or perform external actions. Set an explicit database path, then start it:
+
+```bash
+CAMPUS_EVENT_DB_PATH=./data/campus-events.sqlite npm run mcp
+```
+
+On Windows PowerShell: `$env:CAMPUS_EVENT_DB_PATH = '.\\data\\campus-events.sqlite'; npm run mcp`.
+
+Configure a compatible MCP client to launch `node`, with arguments `dist/scripts/run-mcp.js`, and the `CAMPUS_EVENT_DB_PATH` environment variable. The available tools are `event_create`, `event_get`, `event_update_facts`, `task_create`, `task_submit_result`, `task_transition`, `budget_validate`, `event_list_tasks`, `approval_request`, `approval_record_decision`, and `artifact_get`. Logs go to stderr; stdout is reserved for MCP protocol traffic.
+
 ## Tests
 
 The automated suite covers:
