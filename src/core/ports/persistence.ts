@@ -1,4 +1,4 @@
-import type { PersistedApproval, PersistedArtifact, PersistedEvent, PersistedEventFact, PersistedSpecialistResult, PersistedTask, PersistedValidation } from "../domain.js";
+import type { PersistedApproval, PersistedArtifact, PersistedEvent, PersistedEventFact, PersistedRegistrationForm, PersistedSpecialistResult, PersistedTask, PersistedValidation } from "../domain.js";
 
 export interface VersionedRecord {
   id: string;
@@ -42,6 +42,7 @@ export interface EventFactRepository extends EventScopedRepository<PersistedEven
 }
 export interface SpecialistResultRepository extends EventScopedRepository<PersistedSpecialistResult> {}
 export interface ValidationRepository extends EventScopedRepository<PersistedValidation> {}
+export interface RegistrationFormRepository extends EventScopedRepository<PersistedRegistrationForm> {}
 
 export interface PersistenceTransaction {
   transaction<T>(work: () => T): T;
@@ -55,4 +56,5 @@ export interface ApplicationPersistence extends PersistenceTransaction {
   facts: EventFactRepository;
   results: SpecialistResultRepository;
   validations: ValidationRepository;
+  registrationForms: RegistrationFormRepository;
 }

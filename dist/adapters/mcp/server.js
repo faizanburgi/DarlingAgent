@@ -3,31 +3,34 @@ import { serveStdio } from "@modelcontextprotocol/server/stdio";
 import { z } from "zod";
 import { SqlitePersistence } from "../sqlite/sqlite-persistence.js";
 import { EventApplicationService } from "../../core/event-application-service.js";
+import { RegistrationService } from "../../core/registration-service.js";
 const id = z.string().trim().min(1).max(128).regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/, "Use letters, numbers, '.', '_' or '-'.");
 const text = (name, max = 4000) => z.string().trim().min(1, `${name} is required.`).max(max);
 const taskStatus = z.enum(["queued", "in_progress", "needs_input", "needs_approval", "blocked", "completed", "failed"]);
 /** MCP-only composition root.  The core has no MCP SDK dependency. */
-export function createLocalMcpApplication(databasePath) {
+export function createLocalMcpApplication(databasePath, options = {}) {
     const store = new SqlitePersistence(databasePath);
     const service = new EventApplicationService(store);
+    const registration = new RegistrationService(store, options.tally);
     const server = new McpServer({ name: "campus-event-agent", version: "0.1.0" });
-    registerTools(server, service);
+    registerTools(server, service, registration);
     return {
         server,
         service,
+        registration,
         async close() { await server.close(); store.close(); }
     };
 }
 /** Starts the local-only stdio server.  Diagnostics are deliberately stderr-only. */
-export function startStdioServer(databasePath) {
+export function startStdioServer(databasePath, options = {}) {
     let application;
     const handle = serveStdio(() => {
-        application = createLocalMcpApplication(databasePath);
+        application = createLocalMcpApplication(databasePath, options);
         return application.server;
     }, { onerror: (error) => console.error(`[campus-event-mcp] ${error.message}`) });
     return { async close() { await handle.close(); await application?.close(); } };
 }
-function registerTools(server, service) {
+function registerTools(server, service, registration) {
     server.registerTool("event_create", {
         title: "Create persistent event", description: "Mutation: create a persistent draft planning workflow from an event brief.",
         inputSchema: z.object({ eventId: id, eventBrief: text("eventBrief") })
@@ -75,6 +78,36 @@ function registerTools(server, service) {
         const summary = await service.getSummary(eventId);
         return summary.ok ? ok(summary.value.artifacts, "Artifact metadata retrieved.") : failure(summary);
     });
+    const registrationOptions = z.object({
+        eventId: id,
+        capacity: z.number().int().positive().max(1000000).optional(),
+        deadline: z.string().trim().min(1).max(64).optional(),
+        includeStudentId: z.boolean().default(false),
+        includeDietary: z.boolean().default(false),
+        includeAccessibility: z.boolean().default(false),
+        includeConsent: z.boolean().default(false)
+    });
+    server.registerTool("registration_draft", {
+        title: "Draft registration form", description: "Read-only: build a reviewable registration form specification for an event. Never creates a live form.", inputSchema: registrationOptions
+    }, async ({ eventId, ...options }) => result(await registration.draftRegistration(eventId, options), "Registration draft prepared."));
+    server.registerTool("registration_create", {
+        title: "Create live registration form", description: "Mutation: create the live Tally registration form for an event. Requires explicit confirmation and a configured TALLY_API_KEY.",
+        inputSchema: registrationOptions.extend({ registrationId: id, confirmed: z.boolean().default(false) })
+    }, async ({ eventId, registrationId, confirmed, ...options }) => {
+        const outcome = await registration.createRegistrationForm(eventId, { registrationId, confirmed, ...options });
+        if (!outcome.ok && outcome.reason === "confirmation_required") {
+            const draft = await registration.draftRegistration(eventId, options);
+            return {
+                isError: true,
+                content: [{ type: "text", text: "Operation failed: confirmation_required. Review the draft specification, then repeat the call with confirmed: true." }],
+                structuredContent: { ok: false, reason: outcome.reason, draft: draft.ok ? draft.value : undefined }
+            };
+        }
+        return result(outcome, "Registration form created.");
+    });
+    server.registerTool("registration_get", {
+        title: "Get registration forms", description: "Read-only: retrieve stored Tally registration form metadata and verified URLs for an event.", inputSchema: z.object({ eventId: id })
+    }, async ({ eventId }) => result(await registration.getRegistrations(eventId), "Registration forms retrieved."));
 }
 function result(outcome, success) {
     return outcome.ok ? ok(outcome.value, success) : failure(outcome);

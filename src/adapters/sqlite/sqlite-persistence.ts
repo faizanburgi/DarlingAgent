@@ -8,7 +8,7 @@ import type {
   TaskRepository,
   UpdateResult
 } from "../../core/ports/persistence.js";
-import type { PersistedApproval, PersistedArtifact, PersistedEvent, PersistedEventFact, PersistedSpecialistResult, PersistedTask, PersistedValidation } from "../../core/domain.js";
+import type { PersistedApproval, PersistedArtifact, PersistedEvent, PersistedEventFact, PersistedRegistrationForm, PersistedSpecialistResult, PersistedTask, PersistedValidation } from "../../core/domain.js";
 
 const LATEST_SCHEMA_VERSION = 1;
 
@@ -19,6 +19,7 @@ type ArtifactRow = { id: string; revision: number; event_id: string; artifact_js
 type FactRow = { id: string; revision: number; event_id: string; field: string; value: string; evidence: string; status: PersistedEventFact["status"] };
 type ResultRow = { id: string; revision: number; event_id: string; task_id: string; specialist: string; result_json: string; evidence_json: string; unresolved_json: string };
 type ValidationRow = { id: string; revision: number; event_id: string; checks_json: string };
+type RegistrationFormRow = { id: string; revision: number; event_id: string; tally_form_id: string; form_url: string; status: PersistedRegistrationForm["status"]; spec_hash: string; created_at: string; updated_at: string };
 
 /**
  * SQLite implementation of the core persistence ports. It owns SQL, migration,
@@ -33,6 +34,7 @@ export class SqlitePersistence {
   readonly facts: import("../../core/ports/persistence.js").EventFactRepository;
   readonly results: import("../../core/ports/persistence.js").SpecialistResultRepository;
   readonly validations: import("../../core/ports/persistence.js").ValidationRepository;
+  readonly registrationForms: import("../../core/ports/persistence.js").RegistrationFormRepository;
 
   constructor(path: string) {
     this.database = new Database(path);
@@ -46,6 +48,7 @@ export class SqlitePersistence {
     this.facts = this.createFactRepository();
     this.results = this.createResultRepository();
     this.validations = this.createValidationRepository();
+    this.registrationForms = this.createRegistrationFormRepository();
   }
 
   close(): void {
@@ -129,6 +132,8 @@ export class SqlitePersistence {
       CREATE TRIGGER IF NOT EXISTS specialist_result_task_event_insert BEFORE INSERT ON specialist_results BEGIN SELECT CASE WHEN (SELECT event_id FROM tasks WHERE id = NEW.task_id) != NEW.event_id THEN RAISE(ABORT, 'result task must belong to the same event') END; END;
       CREATE TABLE IF NOT EXISTS validations (id TEXT PRIMARY KEY, revision INTEGER NOT NULL CHECK (revision >= 0), event_id TEXT NOT NULL REFERENCES events(id) ON DELETE RESTRICT, checks_json TEXT NOT NULL);
       CREATE INDEX IF NOT EXISTS validations_event_id_idx ON validations(event_id);
+      CREATE TABLE IF NOT EXISTS registration_forms (id TEXT PRIMARY KEY, revision INTEGER NOT NULL CHECK (revision >= 0), event_id TEXT NOT NULL REFERENCES events(id) ON DELETE RESTRICT, tally_form_id TEXT NOT NULL, form_url TEXT NOT NULL, status TEXT NOT NULL CHECK (status IN ('live', 'unverified')), spec_hash TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+      CREATE INDEX IF NOT EXISTS registration_forms_event_id_idx ON registration_forms(event_id);
     `);
   }
 
@@ -262,6 +267,15 @@ export class SqlitePersistence {
     };
   }
 
+  private createRegistrationFormRepository(): import("../../core/ports/persistence.js").RegistrationFormRepository {
+    return {
+      get: async (id) => mapRegistrationForm(this.database.prepare("SELECT id, revision, event_id, tally_form_id, form_url, status, spec_hash, created_at, updated_at FROM registration_forms WHERE id = ?").get(id) as RegistrationFormRow | undefined),
+      listByEvent: async (eventId) => (this.database.prepare("SELECT id, revision, event_id, tally_form_id, form_url, status, spec_hash, created_at, updated_at FROM registration_forms WHERE event_id = ? ORDER BY id").all(eventId) as RegistrationFormRow[]).map(mapRegistrationForm).filter((record): record is PersistedRegistrationForm => record !== undefined),
+      create: async (record) => this.createRecord(record, "INSERT INTO registration_forms (id, revision, event_id, tally_form_id, form_url, status, spec_hash, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", [record.id, record.revision, record.eventId, record.tallyFormId, record.formUrl, record.status, record.specHash, record.createdAt, record.updatedAt]),
+      update: async (record, expectedRevision) => this.updateSimpleRecord(record, expectedRevision, "registration_forms", "UPDATE registration_forms SET revision = ?, event_id = ?, tally_form_id = ?, form_url = ?, status = ?, spec_hash = ?, created_at = ?, updated_at = ? WHERE id = ? AND revision = ?", [record.eventId, record.tallyFormId, record.formUrl, record.status, record.specHash, record.createdAt, record.updatedAt, record.id])
+    };
+  }
+
   private async createRecord<T extends { id: string }>(record: T, sql: string, values: unknown[]): Promise<CreateResult<T>> {
     try {
       this.database.prepare(sql).run(...values);
@@ -272,7 +286,7 @@ export class SqlitePersistence {
     }
   }
 
-  private async updateSimpleRecord<T extends { id: string; revision: number }>(record: T, expectedRevision: number, table: "approvals" | "artifacts" | "event_facts" | "specialist_results" | "validations", sql: string, values: unknown[]): Promise<UpdateResult<T>> {
+  private async updateSimpleRecord<T extends { id: string; revision: number }>(record: T, expectedRevision: number, table: "approvals" | "artifacts" | "event_facts" | "specialist_results" | "validations" | "registration_forms", sql: string, values: unknown[]): Promise<UpdateResult<T>> {
     const exists = this.database.prepare(`SELECT revision FROM ${table} WHERE id = ?`).get(record.id) as { revision: number } | undefined;
     if (exists === undefined) return { ok: false, reason: "not_found" };
     if (exists.revision !== expectedRevision) return { ok: false, reason: "revision_conflict" };
@@ -304,6 +318,10 @@ function mapResult(row: ResultRow | undefined): PersistedSpecialistResult | unde
 
 function mapValidation(row: ValidationRow | undefined): PersistedValidation | undefined {
   return row === undefined ? undefined : { id: row.id, revision: row.revision, eventId: row.event_id, checks: decodeJson(row.checks_json) };
+}
+
+function mapRegistrationForm(row: RegistrationFormRow | undefined): PersistedRegistrationForm | undefined {
+  return row === undefined ? undefined : { id: row.id, revision: row.revision, eventId: row.event_id, tallyFormId: row.tally_form_id, formUrl: row.form_url, status: row.status, specHash: row.spec_hash, createdAt: row.created_at, updatedAt: row.updated_at };
 }
 
 function isDuplicateId(error: unknown): boolean {

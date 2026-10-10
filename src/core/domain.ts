@@ -115,3 +115,20 @@ export interface PersistedArtifact {
   eventId: string;
   artifact: Artifact;
 }
+
+/**
+ * Metadata for a Tally registration form associated with one event. Stores
+ * only the identifiers and URLs needed for event management: never API keys,
+ * never respondent submissions, never personal information.
+ */
+export interface PersistedRegistrationForm {
+  id: string;
+  revision: number;
+  eventId: string;
+  tallyFormId: string;
+  formUrl: string;
+  status: "live" | "unverified";
+  specHash: string;
+  createdAt: string;
+  updatedAt: string;
+}

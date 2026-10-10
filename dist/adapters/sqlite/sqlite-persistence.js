@@ -14,6 +14,7 @@ export class SqlitePersistence {
     facts;
     results;
     validations;
+    registrationForms;
     constructor(path) {
         this.database = new Database(path);
         this.database.pragma("foreign_keys = ON");
@@ -26,6 +27,7 @@ export class SqlitePersistence {
         this.facts = this.createFactRepository();
         this.results = this.createResultRepository();
         this.validations = this.createValidationRepository();
+        this.registrationForms = this.createRegistrationFormRepository();
     }
     close() {
         this.database.close();
@@ -106,6 +108,8 @@ export class SqlitePersistence {
       CREATE TRIGGER IF NOT EXISTS specialist_result_task_event_insert BEFORE INSERT ON specialist_results BEGIN SELECT CASE WHEN (SELECT event_id FROM tasks WHERE id = NEW.task_id) != NEW.event_id THEN RAISE(ABORT, 'result task must belong to the same event') END; END;
       CREATE TABLE IF NOT EXISTS validations (id TEXT PRIMARY KEY, revision INTEGER NOT NULL CHECK (revision >= 0), event_id TEXT NOT NULL REFERENCES events(id) ON DELETE RESTRICT, checks_json TEXT NOT NULL);
       CREATE INDEX IF NOT EXISTS validations_event_id_idx ON validations(event_id);
+      CREATE TABLE IF NOT EXISTS registration_forms (id TEXT PRIMARY KEY, revision INTEGER NOT NULL CHECK (revision >= 0), event_id TEXT NOT NULL REFERENCES events(id) ON DELETE RESTRICT, tally_form_id TEXT NOT NULL, form_url TEXT NOT NULL, status TEXT NOT NULL CHECK (status IN ('live', 'unverified')), spec_hash TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+      CREATE INDEX IF NOT EXISTS registration_forms_event_id_idx ON registration_forms(event_id);
     `);
     }
     createEventRepository() {
@@ -247,6 +251,14 @@ export class SqlitePersistence {
             update: async (record, expectedRevision) => this.updateSimpleRecord(record, expectedRevision, "validations", "UPDATE validations SET revision = ?, event_id = ?, checks_json = ? WHERE id = ? AND revision = ?", [record.eventId, encodeJson(record.checks), record.id])
         };
     }
+    createRegistrationFormRepository() {
+        return {
+            get: async (id) => mapRegistrationForm(this.database.prepare("SELECT id, revision, event_id, tally_form_id, form_url, status, spec_hash, created_at, updated_at FROM registration_forms WHERE id = ?").get(id)),
+            listByEvent: async (eventId) => this.database.prepare("SELECT id, revision, event_id, tally_form_id, form_url, status, spec_hash, created_at, updated_at FROM registration_forms WHERE event_id = ? ORDER BY id").all(eventId).map(mapRegistrationForm).filter((record) => record !== undefined),
+            create: async (record) => this.createRecord(record, "INSERT INTO registration_forms (id, revision, event_id, tally_form_id, form_url, status, spec_hash, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", [record.id, record.revision, record.eventId, record.tallyFormId, record.formUrl, record.status, record.specHash, record.createdAt, record.updatedAt]),
+            update: async (record, expectedRevision) => this.updateSimpleRecord(record, expectedRevision, "registration_forms", "UPDATE registration_forms SET revision = ?, event_id = ?, tally_form_id = ?, form_url = ?, status = ?, spec_hash = ?, created_at = ?, updated_at = ? WHERE id = ? AND revision = ?", [record.eventId, record.tallyFormId, record.formUrl, record.status, record.specHash, record.createdAt, record.updatedAt, record.id])
+        };
+    }
     async createRecord(record, sql, values) {
         try {
             this.database.prepare(sql).run(...values);
@@ -287,6 +299,9 @@ function mapResult(row) {
 }
 function mapValidation(row) {
     return row === undefined ? undefined : { id: row.id, revision: row.revision, eventId: row.event_id, checks: decodeJson(row.checks_json) };
+}
+function mapRegistrationForm(row) {
+    return row === undefined ? undefined : { id: row.id, revision: row.revision, eventId: row.event_id, tallyFormId: row.tally_form_id, formUrl: row.form_url, status: row.status, specHash: row.spec_hash, createdAt: row.created_at, updatedAt: row.updated_at };
 }
 function isDuplicateId(error) {
     return error instanceof Error && "code" in error && ["SQLITE_CONSTRAINT_PRIMARYKEY", "SQLITE_CONSTRAINT_UNIQUE"].includes(String(error.code));

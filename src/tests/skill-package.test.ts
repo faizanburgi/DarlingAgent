@@ -45,7 +45,8 @@ test("skill documents the MCP tools without overstating them", async () => {
   for (const tool of [
     "event_create", "event_get", "event_update_facts", "task_create", "task_submit_result",
     "task_transition", "budget_validate", "event_list_tasks", "approval_request",
-    "approval_record_decision", "artifact_get"
+    "approval_record_decision", "artifact_get", "registration_draft", "registration_create",
+    "registration_get"
   ]) {
     assert.ok(source.includes(tool), `skill must document the ${tool} tool`);
   }
@@ -54,13 +55,12 @@ test("skill documents the MCP tools without overstating them", async () => {
     "skill must state that installing it does not install the MCP server"
   );
   assert.ok(
-    /no tally integration/i.test(source),
-    "skill must state that Tally integration is out of scope for this milestone"
+    /explicit confirmation/i.test(source),
+    "skill must state that live form creation requires explicit confirmation"
   );
-  assert.equal(
-    /live tally form|tally api|creates? a live form/i.test(source),
-    false,
-    "skill must not claim live form creation"
+  assert.ok(
+    /without confirmation it returns the draft/i.test(source),
+    "skill must state that unconfirmed creation returns the draft instead of a live form"
   );
 });
 

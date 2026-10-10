@@ -111,14 +111,15 @@ export class EventApplicationService {
         const event = await this.store.events.get(eventId);
         if (event === undefined)
             return { ok: false, reason: "not_found" };
-        const [taskRecords, approvals, validations, artifacts, facts, allResults] = await Promise.all([
+        const [taskRecords, approvals, validations, artifacts, facts, allResults, registrationForms] = await Promise.all([
             this.store.tasks.listByEvent(eventId), this.store.approvals.listByEvent(eventId), this.store.validations.listByEvent(eventId),
-            this.store.artifacts.listByEvent(eventId), this.store.facts.listByEvent(eventId), this.store.results.listByEvent(eventId)
+            this.store.artifacts.listByEvent(eventId), this.store.facts.listByEvent(eventId), this.store.results.listByEvent(eventId),
+            this.store.registrationForms.listByEvent(eventId)
         ]);
         const tasks = await Promise.all(taskRecords.map(async (task) => ({
             ...task, dependencies: await this.store.tasks.dependencies(task.id), results: allResults.filter((result) => result.taskId === task.id)
         })));
         const unresolvedIssues = [...event.workflow.unresolvedIssues, ...facts.filter((fact) => fact.status === "conflicting").map((fact) => `Conflicting ${fact.field}: ${fact.value}.`)];
-        return { ok: true, value: { event, tasks, approvals, validations, artifacts, facts, unresolvedIssues } };
+        return { ok: true, value: { event, tasks, approvals, validations, artifacts, facts, registrationForms, unresolvedIssues } };
     }
 }

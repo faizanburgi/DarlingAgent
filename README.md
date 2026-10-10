@@ -191,12 +191,54 @@ Alternatively, install the package globally once (`npm install -g github:OWNER/R
 
 ## Registration forms and Tally
 
-The skill plans registration requirements and drafts form questions (field
-schema plus tracker template). The MCP server is the source of truth for
-executable capabilities: it has no live-form tool, and there is no Tally
-integration in this milestone — so agents must report a form
-**specification**, never a live form link, unless an authorised tool outside
-this package actually created one and returned evidence.
+The MCP server integrates with the [Tally API](https://developers.tally.so/)
+(`POST /forms` to create, `GET /forms/{formId}` to verify; Bearer-token auth;
+100 requests/minute limit) to create real registration forms and return their
+actual URLs. Verified capabilities and limits are documented from the
+official API reference; anything else is reported as an explicit limitation.
+
+Available tools: `registration_draft` (reviewable specification; never
+creates a live form), `registration_create` (requires `confirmed: true` plus
+a configured key), and `registration_get` (stored metadata and verified
+URL). Creation verifies the returned form (matching ID, `PUBLISHED` status,
+not closed) before persisting, refuses duplicates per event, and never
+reports a form as live without that verification.
+
+### Tally account prerequisites
+
+- A Tally account (the API is free on all plans) and an API key from the
+  account's API-keys dashboard. Keys inherit the issuing user's permissions;
+  Tally documents no scoped or least-privilege keys, so **one central Tally
+  account owns every form**: whoever holds that account controls the forms,
+  sees all submissions, consumes the account's quotas, and sets data
+  retention. Plan account access and handover accordingly.
+- The key is server-side configuration only. Set `TALLY_API_KEY` in the
+  environment that launches the MCP server (for example the client's
+  `environment`/`env` block alongside `CAMPUS_EVENT_DB_PATH`). Never commit
+  the key, never pass it as a tool argument, and never paste it into prompts:
+  it is sent solely as an `Authorization` header and never appears in tool
+  responses, logs, errors, or artifacts.
+
+### Workflow
+
+1. `registration_draft` with the event ID (plus optional `capacity`,
+   `deadline`, and `includeStudentId`/`includeDietary`/`includeAccessibility`/`includeConsent`
+   flags) returns the field specification and any missing requirements.
+2. Review the draft with the user and collect the missing details.
+3. `registration_create` with the same inputs, a `registrationId`, and
+   `confirmed: true`. Without confirmation it returns the draft for review
+   and creates nothing.
+4. The server verifies the form, stores only its metadata (external form ID,
+   URL, status, spec hash, timestamps — no keys, no submissions, no personal
+   data), and returns the actual `https://tally.so/r/{formId}` URL.
+5. `registration_get` retrieves the stored metadata at any time.
+
+Sensitive fields (student ID, dietary, accessibility, consent) default to
+optional and are never made mandatory by the server. Local testing uses
+mocked HTTP responses (`registration-tally.test.js`); **live form creation
+has not been tested against a real Tally account**, so confirm the first
+real form (URL opens, questions render, submissions arrive) before relying
+on it.
 
 ## Local MCP server (development checkout)
 
@@ -208,7 +250,7 @@ CAMPUS_EVENT_DB_PATH=./data/campus-events.sqlite npm run mcp
 
 On Windows PowerShell: `$env:CAMPUS_EVENT_DB_PATH = '.\\data\\campus-events.sqlite'; npm run mcp`.
 
-Configure a compatible MCP client to launch `node`, with arguments `dist/scripts/run-mcp.js`, and the `CAMPUS_EVENT_DB_PATH` environment variable. The available tools are `event_create`, `event_get`, `event_update_facts`, `task_create`, `task_submit_result`, `task_transition`, `budget_validate`, `event_list_tasks`, `approval_request`, `approval_record_decision`, and `artifact_get`. Logs go to stderr; stdout is reserved for MCP protocol traffic.
+Configure a compatible MCP client to launch `node`, with arguments `dist/scripts/run-mcp.js`, and the `CAMPUS_EVENT_DB_PATH` environment variable (plus `TALLY_API_KEY` to enable live form creation; without it, `registration_create` reports `tally_not_configured` while drafting and retrieval keep working). The available tools are `event_create`, `event_get`, `event_update_facts`, `task_create`, `task_submit_result`, `task_transition`, `budget_validate`, `event_list_tasks`, `approval_request`, `approval_record_decision`, `artifact_get`, `registration_draft`, `registration_create`, and `registration_get`. Logs go to stderr; stdout is reserved for MCP protocol traffic.
 
 ## Tests
 
@@ -217,14 +259,18 @@ The automated suite covers:
 - budget total calculation;
 - over-budget detection;
 - missing attendee/budget inputs;
-- validation failure while preserving draft artifacts.
+- validation failure while preserving draft artifacts;
+- registration draft generation and missing requirements;
+- confirmation gating and duplicate prevention;
+- mocked Tally success, auth, rate-limit, timeout, and malformed responses;
+- registration metadata persistence and key-leakage checks.
 
 ## WorkBuddy compatibility and verification
 
 The team manifest uses the fields documented for Expert Teams: `plugin.json`, a lead, member list, agent definitions, role avatars, and an Education category. The exact import UI and `settings.json` schema depend on the installed WorkBuddy environment and need validation. See [packages/workbuddy-team/README.md](packages/workbuddy-team/README.md).
 
-Do not add credentials to this repository. The prototype has no external credentials or API calls.
+Do not add credentials to this repository. The prototype has no external credentials or API calls of its own; the optional `TALLY_API_KEY` is supplied at runtime through the environment and never committed.
 
 ## Next scope, deliberately deferred
 
-Five remaining specialists, shared persistence, Telegram, web UI, npm registry publishing, external connectors, bookings, live forms, and production authentication are deferred until the native WorkBuddy execution path is proven. Direct GitHub installation (`npx -y github:OWNER/REPOSITORY#v0.1.0`) is supported; only the npm registry release is deferred.
+Five remaining specialists, shared persistence, Telegram, web UI, npm registry publishing, external connectors, bookings, and production authentication are deferred until the native WorkBuddy execution path is proven. Direct GitHub installation (`npx -y github:OWNER/REPOSITORY#v0.1.0`) is supported; only the npm registry release is deferred. Live Tally form creation is implemented but untested against a real account (see "Registration forms and Tally").

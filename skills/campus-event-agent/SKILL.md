@@ -13,7 +13,7 @@ Coordinate a university event end to end: understand the request, plan specialis
 - The six specialist areas below are **responsibility checklists**, not executable subagents. Perform each workstream yourself, or delegate through tools your environment actually provides.
 - Only two native WorkBuddy roles exist today (Event Coordinator and Finance & Budgeting, in `packages/workbuddy-team/`). Do not claim the other four exist as WorkBuddy agents.
 - The Campus Event Agent MCP server (11 tools: persistent events, tasks, facts, specialist results, budget validation, approvals, artifact metadata) is a **separate installation**. Installing this skill does not install or configure the MCP server. If the tools are unavailable, use the fallback in "When the MCP server is not connected".
-- This skill never books venues, grants approvals, spends funds, sends messages, publishes announcements, creates live registration forms, or integrates with Tally. Those actions require evidence, an authorised tool, or an explicit user decision.
+- This skill never books venues, grants approvals, spends funds, sends messages, or publishes announcements. A live registration form link may only be reported when the `registration_create` tool (or another authorised tool) actually created one and returned evidence with user confirmation.
 
 ## 1. Understand the request
 
@@ -40,7 +40,7 @@ Identify applicable institutional requirements only from actual policies, forms,
 
 ### Registration
 
-Design the registration workflow: required versus optional questions, capacity limit, registration deadline, accessibility and dietary needs where relevant, confirmation-message copy, and a check-in/attendance structure. Minimise personal data. Produce a **form specification** (field schema plus tracker template). A live form link may only be reported when an authorised tool actually created one and returned evidence; this milestone has no Tally integration and no live-form MCP tool, so the default output is the specification, clearly labelled as such.
+Design the registration workflow: required versus optional questions, capacity limit, registration deadline, accessibility and dietary needs where relevant, confirmation-message copy, and a check-in/attendance structure. Minimise personal data; keep student ID, dietary, accessibility, and consent fields optional unless the organiser justifies a requirement. Produce a **form specification** first with `registration_draft` (capacity, deadline, and optional-field flags). A live form link may only be reported after the user reviews that specification and `registration_create` is called with explicit confirmation; the server verifies the returned form before storing it. Without a configured Tally integration, the specification is the final output, clearly labelled as such.
 
 ### Logistics
 
@@ -97,6 +97,9 @@ When the MCP server is connected, use its tools instead of in-conversation track
 | `approval_request` | Record a pending approval (does not execute the action). |
 | `approval_record_decision` | Record an `approved`, `rejected`, or `expired` decision with revision checks. |
 | `artifact_get` | List draft artifact metadata (contents are never exposed). |
+| `registration_draft` | Build a reviewable registration specification (fields, capacity, missing requirements). Never creates a live form. |
+| `registration_create` | Create the live Tally form. Requires explicit confirmation (`confirmed: true`) and a configured `TALLY_API_KEY`; without confirmation it returns the draft for review. |
+| `registration_get` | List stored registration form metadata and verified URLs. |
 
 Always read `event_get` before acting on an existing event. Pass the current revision to transitions and decisions; on `revision_conflict`, re-read and retry deliberately. Report tool failures with their reason (`not_found`, `duplicate_id`, `revision_conflict`, `approval_required`, `dependency_unmet`, `conflicting_fact`, and others) rather than retrying blindly.
 
