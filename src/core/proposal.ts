@@ -7,6 +7,6 @@ export const proposalSchema=z.object({
   vendors:z.array(z.object({name:text,source:z.url(),contact:text.optional(),services:text,publishedPrice:text.optional(),checkedAt:z.iso.date(),verification:z.enum(['source_reviewed','unverified'])}).strict()).max(30),
   pendingApprovals:z.array(text).max(50),
   unresolvedIssues:z.array(text).max(50),
-  invitation:z.object({to:z.array(z.email()).max(100),subject:text,body:z.string().min(1).max(20000),status:z.literal('draft')}).strict().optional()
+  invitation:z.object({to:z.array(z.email()).max(100),subject:text,body:z.string().min(1).max(20000).transform(value=>value.replace(/\\r\\n/g,'\n').replace(/\\n/g,'\n')),status:z.literal('draft')}).strict().optional()
 }).strict();
 export type ProposalContent=z.infer<typeof proposalSchema>;

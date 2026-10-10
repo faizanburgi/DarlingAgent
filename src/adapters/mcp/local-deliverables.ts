@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/server';
 import type { EventApplicationService } from '../../core/event-application-service.js';
+import type { RegistrationSpec } from '../../core/registration.js';
 import { proposalSchema, type ProposalContent } from '../../core/proposal.js';
 import { OperationsStore } from '../../operations/store.js';
 import { DocumentService } from '../../operations/documents.js';
@@ -14,6 +15,7 @@ export function registerLocalDeliverables(server:McpServer,service:EventApplicat
   const store=new OperationsStore(databasePath),owner='1',directory=resolve(dirname(databasePath),'deliverables');
   store.user(owner,owner);
   store.db.exec('CREATE TABLE IF NOT EXISTS local_proposals(event_id TEXT PRIMARY KEY REFERENCES events(id),revision INTEGER NOT NULL,content TEXT NOT NULL)');
+  store.db.exec('CREATE TABLE IF NOT EXISTS local_registration_drafts(event_id TEXT PRIMARY KEY REFERENCES events(id),spec TEXT NOT NULL)');
   const documents=new DocumentService(store,service,directory),team=new TeamService(store);
   const id=z.string().min(1).max(128).regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/);
   async function access(eventId:string) {
@@ -37,13 +39,14 @@ export function registerLocalDeliverables(server:McpServer,service:EventApplicat
     await access(eventId);
     const row=store.db.prepare('SELECT content FROM local_proposals WHERE event_id=?').get(eventId) as {content:string}|undefined;
     const content:ProposalContent|undefined=row?proposalSchema.parse(JSON.parse(row.content)):undefined;
-    const document=await documents.proposal(owner,eventId,content);await documents.read(owner,document.id);
+    const draft=store.db.prepare('SELECT spec FROM local_registration_drafts WHERE event_id=?').get(eventId) as {spec:string}|undefined;
+    const document=await documents.proposal(owner,eventId,content,draft?JSON.parse(draft.spec) as RegistrationSpec:undefined);await documents.read(owner,document.id);
     const path=(store.db.prepare('SELECT path FROM op_documents WHERE id=?').get(document.id) as {path:string}).path;
     const registered=await service.registerArtifact({id:document.id,eventId,artifact:{type:'event_plan',path,status:'draft'}},async()=>{await documents.read(owner,document.id);return true;});
     if(!registered.ok) throw new Error('PDF written but artifact metadata could not be saved');
     await mkdir(directory,{recursive:true});
     const summary=await service.getSummary(eventId),trackerPath=join(directory,`${eventId}-${randomUUID()}-tracker.json`);
-    await writeFile(trackerPath,JSON.stringify(summary,null,2),{mode:0o600,flag:'wx'});
+    await writeFile(trackerPath,JSON.stringify({summary,taskDetails:team.list(owner,eventId),proposal:content,registrationDraft:draft?JSON.parse(draft.spec):null},null,2),{mode:0o600,flag:'wx'});
     let invitationPath:string|undefined;
     if(content?.invitation) {invitationPath=join(directory,`${document.id}-invitation.txt`);await writeFile(invitationPath,`UNSENT DRAFT\nTo: ${content.invitation.to.join(', ')}\nSubject: ${content.invitation.subject}\n\n${content.invitation.body}`,{mode:0o600,flag:'wx'});}
     return reply({...document,path,trackerPath,invitationPath,verified:true});

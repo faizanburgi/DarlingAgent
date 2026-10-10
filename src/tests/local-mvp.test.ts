@@ -25,11 +25,12 @@ test('real stdio process persists two different events, tasks, budgets, proposal
       await call('task_update',{eventId,taskId:`${eventId}-plan`,expectedRevision:0,description:'Draft planning output',priority:1});
       const stale=await client.callTool({name:'task_update',arguments:{eventId,taskId:`${eventId}-plan`,expectedRevision:0,priority:0}});assert.equal(stale.isError,true);
       const validation=await call('budget_validate',{eventId,validationId:`${eventId}-budget`});assert.ok(validation.checks.every((c:any)=>c.status==='passed'));
-      const draft=await call('registration_draft',{eventId});assert.equal(draft.capacity,count);
+      const draft=await call('registration_draft',{eventId,includeDietary:true,deadline:'2026-10-18'});assert.equal(draft.capacity,count);
       const denied=await client.callTool({name:'registration_create',arguments:{eventId,registrationId:`${eventId}-form`,confirmed:false}});assert.equal(denied.isError,true);
       assert.equal((await call('registration_get',{eventId})).forms.length,0);
-      await call('proposal_save',{eventId,expectedRevision:0,content:{objectives:['Connect participants'],agenda:[{time:'Proposed 14:00',activity:'Welcome and introductions'}],assignments:[{task:'Venue',assignee:'Organizer - to confirm',status:'proposed'}],vendors:[],pendingApprovals:['Publish registration'],unresolvedIssues:['Room unconfirmed'],invitation:{to:[],subject:`Invitation: ${title}`,body:'Join our event. Registration link pending publication.',status:'draft'}}});
+      await call('proposal_save',{eventId,expectedRevision:0,content:{objectives:['Connect participants'],agenda:[{time:'Proposed 14:00',activity:'Welcome and introductions'}],assignments:[{task:'Venue',assignee:'Organizer - to confirm',status:'proposed'}],vendors:[],pendingApprovals:['Publish registration'],unresolvedIssues:['Room unconfirmed'],invitation:{to:[],subject:`Invitation: ${title}`,body:'Join our event.\\nRegistration link pending publication.',status:'draft'}}});
       const doc=await call('document_generate',{eventId});assert.equal(doc.verified,true);assert.ok((await PDFDocument.load(await readFile(doc.path))).getPageCount()>0);assert.match(await readFile(doc.invitationPath,'utf8'),/UNSENT DRAFT/);assert.match(await readFile(doc.trackerPath,'utf8'),/Publish registration/);
+      const tracker=JSON.parse(await readFile(doc.trackerPath,'utf8'));assert.deepEqual(tracker.registrationDraft,draft);assert.equal(tracker.taskDetails.length,2);assert.doesNotMatch(await readFile(doc.invitationPath,'utf8'),/\\n/);
       const summary=await call('event_get',{eventId});assert.equal(summary.event.workflow.total,amount);assert.equal(summary.tasks.length,2);evidence.push({eventId,title,count,budget:summary.event.workflow.total,taskCount:summary.tasks.length,document:doc,registrationStatus:'draft_only'});
     }
     await client.close();client=await connect();

@@ -1,4 +1,4 @@
-import { buildRegistrationSpec } from '../core/registration.js';
+import { buildRegistrationSpec, type RegistrationSpec } from '../core/registration.js';
 import type { ProposalContent } from '../core/proposal.js';
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
@@ -9,7 +9,7 @@ import type { EventApplicationService } from '../core/event-application-service.
 
 export class DocumentService {
   constructor(private store: OperationsStore,private events: EventApplicationService,private directory: string) {}
-  async proposal(owner: string,eventId: string,content?:ProposalContent) {
+  async proposal(owner: string,eventId: string,content?:ProposalContent,registrationDraft?:RegistrationSpec) {
     this.store.authorize(owner,eventId);
     const result = await this.events.getSummary(eventId);
     if (!result.ok) throw new Error('Event missing');
@@ -59,8 +59,8 @@ export class DocumentService {
     const forms=this.store.db.prepare('SELECT form_url,status FROM registration_forms WHERE event_id=?').all(eventId) as {form_url:string;status:string}[];
     if(!forms.length) {
       paragraph('Not published. Registration draft requires explicit approval and a configured Tally connection.');
-      const draft=buildRegistrationSpec(event);
-      paragraph(`Proposed capacity: ${draft.capacity ?? 'Not set'}. Automatic deadline closing is not configured.`);
+      const draft=registrationDraft ?? buildRegistrationSpec(event);
+      paragraph(`Proposed capacity: ${draft.capacity ?? 'Not set'}. Requested deadline: ${draft.deadline ?? 'Not set'}. Automatic deadline closing is not configured.`);
       for(const field of draft.fields) paragraph(`${field.label} (${field.kind}, ${field.required?'required':'optional'})`);
     }
     for(const form of forms) paragraph(`${form.status}: ${form.form_url}`);
@@ -69,7 +69,7 @@ export class DocumentService {
     for(const vendor of content?.vendors ?? []) paragraph(`${vendor.name} [${vendor.verification}, checked ${vendor.checkedAt}]. ${vendor.services}. Contact: ${vendor.contact ?? 'Not found'}. Published price: ${vendor.publishedPrice ?? 'Not found; request a quotation'}. Source: ${vendor.source}`);
     paragraph('Pending approvals',true);
     for(const item of content?.pendingApprovals ?? ['No approval decisions recorded in this proposal.']) paragraph(item);
-    if(content?.invitation) {paragraph('Invitation email - UNSENT DRAFT',true);paragraph(`To: ${content.invitation.to.join(', ') || 'Recipients not selected'}`);paragraph(`Subject: ${content.invitation.subject}`);paragraph(content.invitation.body);}
+    if(content?.invitation) {paragraph('Invitation email - UNSENT DRAFT',true);paragraph(`To: ${content.invitation.to.join(', ') || 'Recipients not selected'}`);paragraph(`Subject: ${content.invitation.subject}`);for(const line of content.invitation.body.split(/\n/)) {if(line.trim()) paragraph(line);else y-=5;}}
     if(facts.length) paragraph('Facts and evidence',true);
     for(const fact of facts) paragraph(`${fact.field}: ${fact.value} [${fact.status}]. Source: ${fact.evidence}`);
     paragraph('Assumptions and outstanding work',true);
