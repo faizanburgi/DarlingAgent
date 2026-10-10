@@ -1,3 +1,5 @@
+import type { OperationsStore } from "../../operations/store.js";
+import { registerLocalDeliverables } from "./local-deliverables.js";
 import { structuredEventSchema } from "../../core/structured-event.js";
 import { McpServer } from "@modelcontextprotocol/server";
 import { serveStdio } from "@modelcontextprotocol/server/stdio";
@@ -29,12 +31,13 @@ export function createLocalMcpApplication(databasePath: string, options: LocalMc
   const service = new EventApplicationService(store);
   const registration = new RegistrationService(store, options.tally);
   const server = new McpServer({ name: "campus-event-agent", version: "0.1.0" });
-  registerTools(server, service, registration);
+  const local=registerLocalDeliverables(server,service,databasePath);
+  registerTools(server, service, registration,local);
   return {
     server,
     service,
     registration,
-    async close() { await server.close(); store.close(); }
+    async close() { await server.close(); local.close(); store.close(); }
   };
 }
 
@@ -48,7 +51,7 @@ export function startStdioServer(databasePath: string, options: LocalMcpOptions 
   return { async close() { await handle.close(); await application?.close(); } };
 }
 
-function registerTools(server: McpServer, service: EventApplicationService, registration: RegistrationService): void {
+function registerTools(server: McpServer, service: EventApplicationService, registration: RegistrationService,local:OperationsStore): void {
   server.registerTool("event_create", {
     title: "Create persistent event", description: "Mutation: create a persistent draft planning workflow from an event brief.",
     inputSchema: z.object({ eventId: id, eventBrief: text("eventBrief") })
@@ -124,7 +127,11 @@ function registerTools(server: McpServer, service: EventApplicationService, regi
 
   server.registerTool("registration_draft", {
     title: "Draft registration form", description: "Read-only: build a reviewable registration form specification for an event. Never creates a live form.", inputSchema: registrationOptions
-  }, async ({ eventId, ...options }) => result(await registration.draftRegistration(eventId, options), "Registration draft prepared."));
+  }, async ({ eventId, ...options }) => {
+    const draft=await registration.draftRegistration(eventId,options);
+    if(draft.ok) local.db.prepare('INSERT INTO local_registration_drafts VALUES(?,?) ON CONFLICT(event_id) DO UPDATE SET spec=excluded.spec').run(eventId,JSON.stringify(draft.value));
+    return result(draft,"Registration draft prepared.");
+  });
 
   server.registerTool("registration_create", {
     title: "Create live registration form", description: "Mutation: create the live Tally registration form for an event. Requires explicit confirmation and a configured TALLY_API_KEY.",
@@ -157,7 +164,7 @@ function result<T>(outcome: ServiceResult<T>, success: string) {
 }
 
 function ok(value: unknown, summary: string) {
-  return { content: [{ type: "text" as const, text: summary }], structuredContent: { ok: true, value } };
+  return { content: [{ type: "text" as const, text: `${summary}\n${JSON.stringify(value)}` }], structuredContent: { ok: true, value } };
 }
 
 function failure(outcome: Exclude<ServiceResult<unknown>, { ok: true; value: unknown }>) {

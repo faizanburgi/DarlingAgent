@@ -17,7 +17,8 @@
     "start": "node dist/scripts/run-server.js",
     "worker": "node dist/scripts/run-worker.js",
     "mcp:operations": "node dist/scripts/run-operations-mcp.js",
-    "migrate": "node dist/scripts/migrate.js"
+    "migrate": "node dist/scripts/migrate.js",
+    "expert:package": "npm run build && node dist/scripts/package-expert.js"
   },
   "bin": {
     "campus-event-agent": "dist/scripts/run-mcp.js"
@@ -27,7 +28,8 @@
     "skills/**/*",
     "README.md",
     "packages/workbuddy-team/**/*",
-    ".env.example"
+    ".env.example",
+    "packages/darlingagent-expert/**/*"
   ],
   "devDependencies": {
     "@modelcontextprotocol/client": "2.3.1",

@@ -1,3 +1,5 @@
+import { buildRegistrationSpec, type RegistrationSpec } from '../core/registration.js';
+import type { ProposalContent } from '../core/proposal.js';
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve, sep } from 'node:path';
@@ -7,7 +9,7 @@ import type { EventApplicationService } from '../core/event-application-service.
 
 export class DocumentService {
   constructor(private store: OperationsStore,private events: EventApplicationService,private directory: string) {}
-  async proposal(owner: string,eventId: string) {
+  async proposal(owner: string,eventId: string,content?:ProposalContent,registrationDraft?:RegistrationSpec) {
     this.store.authorize(owner,eventId);
     const result = await this.events.getSummary(eventId);
     if (!result.ok) throw new Error('Event missing');
@@ -41,16 +43,37 @@ export class DocumentService {
     paragraph('Event details',true);
     for(const [label,value] of Object.entries({Date:request.date,Time:request.startTime && `${request.startTime} - ${request.endTime ?? 'TBC'}`,Timezone:request.timezone,Location:request.location,Venue:request.venue,Organizer:request.organizer,Attendance:request.attendeeCount})) paragraph(`${label}: ${value ?? 'Not confirmed'}`);
     if(request.description) paragraph(request.description);
+    paragraph('Objectives',true);
+    for(const item of content?.objectives ?? ['Objectives not yet recorded.']) paragraph(item);
+    paragraph('Proposed agenda',true);
+    for(const item of content?.agenda ?? []) paragraph(`${item.time}: ${item.activity}`);
+    if(!content?.agenda.length) paragraph('Agenda pending organizer confirmation.');
     paragraph('Itemized budget',true);
     for(const line of event.workflow.budget) paragraph(`${line.item}: ${request.currency ?? 'MYR'} ${line.amount.toFixed(2)} [${line.status}] - ${line.note}`);
     paragraph(`Total: ${request.currency} ${event.workflow.total.toFixed(2)} | Remaining: ${event.workflow.remainingBudget?.toFixed(2) ?? 'Not verified'}`);
     paragraph('Organizer checklist',true);
     if(!tasks.length) paragraph('No organizer tasks recorded.');
     for(const task of tasks) paragraph(`${task.title} [${task.status}]${task.dependencies.length ? ` - depends on ${task.dependencies.join(', ')}` : ''}`);
+    for(const item of content?.assignments ?? []) paragraph(`${item.task}: ${item.assignee} [${item.status}]`);
+    paragraph('Registration',true);
+    const forms=this.store.db.prepare('SELECT form_url,status FROM registration_forms WHERE event_id=?').all(eventId) as {form_url:string;status:string}[];
+    if(!forms.length) {
+      paragraph('Not published. Registration draft requires explicit approval and a configured Tally connection.');
+      const draft=registrationDraft ?? buildRegistrationSpec(event);
+      paragraph(`Proposed capacity: ${draft.capacity ?? 'Not set'}. Requested deadline: ${draft.deadline ?? 'Not set'}. Automatic deadline closing is not configured.`);
+      for(const field of draft.fields) paragraph(`${field.label} (${field.kind}, ${field.required?'required':'optional'})`);
+    }
+    for(const form of forms) paragraph(`${form.status}: ${form.form_url}`);
+    paragraph('Vendor research',true);
+    if(!content?.vendors.length) paragraph('No source-reviewed vendors recorded. Budget figures remain planning estimates.');
+    for(const vendor of content?.vendors ?? []) paragraph(`${vendor.name} [${vendor.verification}, checked ${vendor.checkedAt}]. ${vendor.services}. Contact: ${vendor.contact ?? 'Not found'}. Published price: ${vendor.publishedPrice ?? 'Not found; request a quotation'}. Source: ${vendor.source}`);
+    paragraph('Pending approvals',true);
+    for(const item of content?.pendingApprovals ?? ['No approval decisions recorded in this proposal.']) paragraph(item);
+    if(content?.invitation) {paragraph('Invitation email - UNSENT DRAFT',true);paragraph(`To: ${content.invitation.to.join(', ') || 'Recipients not selected'}`);paragraph(`Subject: ${content.invitation.subject}`);for(const line of content.invitation.body.split(/\n/)) {if(line.trim()) paragraph(line);else y-=5;}}
     if(facts.length) paragraph('Facts and evidence',true);
     for(const fact of facts) paragraph(`${fact.field}: ${fact.value} [${fact.status}]. Source: ${fact.evidence}`);
     paragraph('Assumptions and outstanding work',true);
-    for(const item of [...event.workflow.assumptions,...result.value.unresolvedIssues]) paragraph(item);
+    for(const item of [...event.workflow.assumptions,...result.value.unresolvedIssues,...(content?.unresolvedIssues ?? [])]) paragraph(item);
     const pages = pdf.getPages();
     pages.forEach((p,index) => p.drawText(`DarlingAgent | Event ${eventId} | Revision ${event.revision} | ${index+1} / ${pages.length}`,{x:48,y:30,size:8,font:regular}));
     const bytes = await pdf.save();
