@@ -10,7 +10,8 @@ This is a tested implementation increment, **not completion of the full 2.0 spec
 | Legacy title/attendance budget fallback | IMPLEMENTED | No fixed title; scaled illustrative costs clearly labeled, not autonomous planning |
 | Authenticated owner-scoped operations MCP/HTTP | IMPLEMENTED | HTTP auth, private Telegram identity, cross-user rejection and idempotency tested |
 | Task creation, dependencies, start, result submission and verified completion | IMPLEMENTED | Local SQLite checks; declared budget/document/action output contracts gate completion; agent text cannot prove external completion |
-| Full task/team lifecycle and groups | NOT_IMPLEMENTED | Assignment, deadlines, acceptance, cancellation/reopen, group roles still needed |
+| Task/team metadata and participation | IMPLEMENTED | Identity-bound invitations, recipient acceptance/decline, assignments, deadlines, priorities, notes, document references, cancellation/reopen and revision checks tested locally |
+| Full team/group operations | NOT_IMPLEMENTED | Group roles, member removal, manual completion confirmation and assignment/deadline notifications remain |
 | Proposal PDF and document versions | IMPLEMENTED | Real PDF parsing, multipage, hash/tamper/access tests; two offline sample PDFs rendered and inspected |
 | Telegram messages and file upload | TESTED_WITH_MOCKS | Matching chat/message/file acknowledgments validated; no live delivery |
 | Reminder worker | IMPLEMENTED | Atomic claims, restart uncertainty, recurrence/DST, rate-limit retry, cancellation tested |

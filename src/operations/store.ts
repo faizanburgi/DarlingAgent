@@ -58,6 +58,20 @@ export class OperationsStore {
       this.db.exec("CREATE TABLE op_task_expectations (task_id TEXT PRIMARY KEY REFERENCES tasks(id), output_kind TEXT NOT NULL CHECK(output_kind IN ('document','action','budget')), evidence TEXT)");
       this.db.prepare('INSERT INTO operations_migrations VALUES(3,?)').run(new Date().toISOString());
     }).immediate();
+    this.db.transaction(()=>{
+      if(this.db.prepare('SELECT 1 FROM operations_migrations WHERE version=4').get()) return;
+      this.db.exec(`
+        CREATE TABLE op_task_details (
+          task_id TEXT PRIMARY KEY REFERENCES tasks(id), description TEXT NOT NULL DEFAULT '', workstream TEXT NOT NULL DEFAULT '',
+          owner_id TEXT REFERENCES op_users(id), assignment_status TEXT NOT NULL DEFAULT 'unassigned' CHECK(assignment_status IN ('unassigned','assigned','accepted','declined')),
+          deadline TEXT, priority INTEGER NOT NULL DEFAULT 2 CHECK(priority BETWEEN 0 AND 3), created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+        );
+        CREATE TABLE op_task_notes (id TEXT PRIMARY KEY, task_id TEXT NOT NULL REFERENCES tasks(id), author TEXT NOT NULL REFERENCES op_users(id), text TEXT NOT NULL, document_id TEXT REFERENCES op_documents(id), created_at TEXT NOT NULL);
+        CREATE TABLE op_task_history (id INTEGER PRIMARY KEY AUTOINCREMENT, task_id TEXT NOT NULL REFERENCES tasks(id), actor TEXT NOT NULL REFERENCES op_users(id), operation TEXT NOT NULL, snapshot TEXT NOT NULL, created_at TEXT NOT NULL);
+        CREATE TABLE op_team_invites (token_hash TEXT PRIMARY KEY, event_id TEXT NOT NULL REFERENCES events(id), user_id TEXT NOT NULL REFERENCES op_users(id), expires_at TEXT NOT NULL, used INTEGER NOT NULL DEFAULT 0);
+      `);
+      this.db.prepare('INSERT INTO operations_migrations VALUES(4,?)').run(new Date().toISOString());
+    }).immediate();
   }
   request(owner:string,id:string,payloadHash:string): {result?:unknown;claimed:boolean} {
     return this.db.transaction(()=>{
@@ -91,19 +105,19 @@ export class OperationsStore {
       this.db.prepare('INSERT INTO op_context VALUES(?,?) ON CONFLICT(user_id) DO UPDATE SET event_id=excluded.event_id').run(owner, event);
     })();
   }
-  authorize(owner: string, event: string) {
-    if (!this.db.prepare("SELECT 1 FROM op_members WHERE event_id=? AND user_id=? AND role='owner'").get(event, owner)) throw new Error('Event access denied');
+  authorize(owner: string, event: string, level: 'owner'|'member' = 'owner') {
+    if (!this.db.prepare("SELECT 1 FROM op_members WHERE event_id=? AND user_id=? AND (?='member' OR role='owner')").get(event, owner, level)) throw new Error('Event access denied');
   }
   events(owner: string) { return this.db.prepare('SELECT event_id FROM op_members WHERE user_id=? ORDER BY event_id').all(owner) as { event_id: string }[]; }
   current(owner: string): string | undefined { return (this.db.prepare('SELECT event_id FROM op_context WHERE user_id=?').get(owner) as { event_id: string } | undefined)?.event_id; }
-  select(owner: string, event: string) { this.authorize(owner, event); this.db.prepare('INSERT INTO op_context VALUES(?,?) ON CONFLICT(user_id) DO UPDATE SET event_id=excluded.event_id').run(owner,event); }
+  select(owner: string, event: string) { this.authorize(owner, event, 'member'); this.db.prepare('INSERT INTO op_context VALUES(?,?) ON CONFLICT(user_id) DO UPDATE SET event_id=excluded.event_id').run(owner,event); }
   enqueue(updateId: number, owner: string, text: string) {
     return this.db.prepare('INSERT OR IGNORE INTO op_inbox(id,owner,text,created_at) VALUES(?,?,?,?)').run(updateId,owner,text,new Date().toISOString()).changes === 1;
   }
   schedule(owner: string, input: z.input<typeof reminderSchema>, now = new Date()) {
     const value = reminderSchema.parse(input);
     if (new Date(value.nextAt) <= now) throw new Error('Reminder must be in the future');
-    if (value.eventId) this.authorize(owner, value.eventId);
+    if (value.eventId) this.authorize(owner, value.eventId, 'member');
     if (value.kind === 'progress' && !value.eventId) throw new Error('Progress reminders require an event');
     const id = randomUUID();
     this.db.prepare("INSERT INTO op_reminders(id,owner,chat_id,event_id,message,next_at,timezone,recurrence,kind,status) VALUES(?,?,?,?,?,?,?,?,?,'scheduled')")

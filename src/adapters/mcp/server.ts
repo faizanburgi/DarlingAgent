@@ -10,7 +10,7 @@ import type { TaskStatus } from "../../core/domain.js";
 
 const id = z.string().trim().min(1).max(128).regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/, "Use letters, numbers, '.', '_' or '-'.");
 const text = (name: string, max = 4000) => z.string().trim().min(1, `${name} is required.`).max(max);
-const taskStatus = z.enum(["queued", "in_progress", "needs_input", "needs_approval", "blocked", "completed", "failed"]);
+const taskStatus = z.enum(["queued", "in_progress", "needs_input", "needs_approval", "blocked", "completed", "failed", "cancelled"]);
 
 export interface LocalMcpOptions {
   tally?: TallyFormProvider;

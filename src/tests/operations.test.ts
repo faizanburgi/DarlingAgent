@@ -272,3 +272,58 @@ test('tool-verifiable task completion unlocks dependents and rejects invented ev
     assert.equal((await runtime.dispatch('101','task_complete',{taskId:second.value.id,expectedRevision:1,evidenceId:doc.id}) as {ok:boolean}).ok,true);
   });
 });
+
+test('team invitations bind identity and task assignments require recipient acceptance',async()=>{
+  await withRuntime(async runtime=>{
+    const id=await event(runtime);
+    await runtime.events.createTask({id:'team-task',eventId:id,title:'Book venue',status:'queued'});
+    assert.throws(()=>runtime.team.edit('101',{taskId:'team-task',expectedRevision:0,assignee:'202'}),/denied/);
+    const invitation=runtime.team.invite('101',id,'202'),token=invitation.joinCommand.split(' ')[1];
+    assert.throws(()=>runtime.team.join('101',token));runtime.team.join('202',token);assert.throws(()=>runtime.team.join('202',token));
+    runtime.team.edit('101',{taskId:'team-task',expectedRevision:0,assignee:'202',deadline:'2027-01-01T10:00:00Z',priority:0});
+    assert.throws(()=>runtime.team.respond('101','team-task',true));
+    runtime.team.respond('202','team-task',true);
+    assert.throws(()=>runtime.team.edit('101',{taskId:'team-task',expectedRevision:1,description:'Stale'}),/revision/);
+    assert.throws(()=>runtime.team.edit('202',{taskId:'team-task',expectedRevision:2,description:'Unauthorized'}),/denied/);
+    runtime.team.note('202',{taskId:'team-task',text:'Venue quote requested'});
+    assert.equal(runtime.team.history('101','team-task').notes.length,1);
+    const cancelled=await runtime.dispatch('101','task_cancel',{taskId:'team-task',expectedRevision:2}) as {ok:boolean};assert.equal(cancelled.ok,true);
+    assert.equal((await runtime.persistence.tasks.get('team-task'))?.status,'cancelled');
+    const reopened=await runtime.dispatch('101','task_reopen',{taskId:'team-task',expectedRevision:3}) as {ok:boolean};assert.equal(reopened.ok,true);
+    assert.equal((await runtime.persistence.tasks.get('team-task'))?.status,'queued');
+  });
+});
+
+test('task table rebuild preserves dependencies, operational references and integrity triggers',async()=>{
+  await withRuntime(async(runtime,dir)=>{
+    const id=await event(runtime);
+    await runtime.events.createTask({id:'upgrade-one',eventId:id,title:'One',status:'queued'});
+    await runtime.events.createTask({id:'upgrade-two',eventId:id,title:'Two',status:'queued'},['upgrade-one']);
+    runtime.team.edit('101',{taskId:'upgrade-one',expectedRevision:0,description:'Keep this'});
+    runtime.store.db.prepare('DELETE FROM schema_migrations WHERE version=2').run();
+    const {SqlitePersistence}=await import('../adapters/sqlite/sqlite-persistence.js');
+    const upgraded=new SqlitePersistence(join(dir,'events.sqlite'));
+    try {
+      assert.equal(upgraded.schemaVersion(),2);
+      assert.equal((await upgraded.tasks.get('upgrade-one'))?.revision,1);
+      assert.equal((runtime.team.list('101',id)[0] as {description:string}).description,'Keep this');
+      const start=await runtime.events.transitionTask('upgrade-two',0,'in_progress');assert.equal(start.ok,false);
+      assert.deepEqual(runtime.store.db.pragma('foreign_key_check'),[]);
+      assert.equal((await runtime.dispatch('101','task_cancel',{taskId:'upgrade-one',expectedRevision:1}) as {ok:boolean}).ok,true);
+    } finally {upgraded.close();}
+  });
+});
+
+test('progress reports show overdue assignments and omit cancelled tasks',async()=>{
+  const requests:unknown[]=[];
+  await withRuntime(async runtime=>{
+    const id=await event(runtime);
+    await runtime.events.createTask({id:'overdue',eventId:id,title:'Venue booking',status:'queued'});
+    await runtime.events.createTask({id:'cancelled-report',eventId:id,title:'Removed task',status:'queued'});
+    runtime.team.edit('101',{taskId:'overdue',expectedRevision:0,deadline:'2020-01-01T00:00:00Z'});
+    await runtime.dispatch('101','task_cancel',{taskId:'cancelled-report',expectedRevision:0});
+    runtime.store.schedule('101',{message:'Weekly review',eventId:id,kind:'progress',nextAt:'2020-01-02T00:00:00Z',timezone:'UTC'},new Date('2020-01-01'));
+    await tick(runtime.store,runtime.telegram,runtime.events,new Date('2020-01-03'));
+    const body=JSON.parse(requests[0] as string);assert.match(body.text,/OVERDUE/);assert.match(body.text,/unassigned/);assert.doesNotMatch(body.text,/Removed task/);
+  },mockTelegram(requests));
+});

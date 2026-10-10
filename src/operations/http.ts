@@ -92,7 +92,10 @@ async function handleTelegram(runtime:Runtime,owner:string,text:string,callback:
     else await send('Action rejected.');return;
   }
   const [command,arg,...rest]=text.trim().split(/\s+/);
-  if(command==='/start' || command==='/help') {await send('DarlingAgent operations connected. Commands: /events, /use EVENT_ID, /status, /connections, /connect gmail|calendar|drive|tally, /reconnect PROVIDER, /disconnect PROVIDER, /pending, /review ACTION_ID, /reminders, /cancel REMINDER_ID, /snooze REMINDER_ID ISO_TIME, /pdf. Natural-language requests are saved for your WorkBuddy coordinator. Cloud AI execution is not connected.');return;}
+  if(command==='/start' || command==='/help') {await send('DarlingAgent operations connected. Commands: /join TOKEN, /accept TASK_ID, /decline TASK_ID, /tasks, /events, /use EVENT_ID, /status, /connections, /connect gmail|calendar|drive|tally, /reconnect PROVIDER, /disconnect PROVIDER, /pending, /review ACTION_ID, /reminders, /cancel REMINDER_ID, /snooze REMINDER_ID ISO_TIME, /pdf. Natural-language requests are saved for your WorkBuddy coordinator. Cloud AI execution is not connected.');return;}
+  if(command==='/join') {await send(JSON.stringify(runtime.team.join(owner,arg)));return;}
+  if(command==='/accept' || command==='/decline') {await send(JSON.stringify(runtime.team.respond(owner,arg,command==='/accept')));return;}
+  if(command==='/tasks') {const event=runtime.store.current(owner);if(!event) throw new Error('Select an event first');await send(JSON.stringify(runtime.team.list(owner,event)));return;}
   if(command==='/connections') {await send(JSON.stringify(runtime.connections.list(owner),null,2));return;}
   if(command==='/connect' || command==='/reconnect' || command==='/disconnect') {
     if(!Object.hasOwn(providers,arg)) {await send('Choose gmail, calendar, drive or tally.');return;}

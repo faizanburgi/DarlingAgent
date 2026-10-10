@@ -9,9 +9,10 @@ import { OperationsStore,reminderSchema } from './store.js';
 import { Connections,Vault } from './connect.js';
 import { TelegramClient } from './telegram.js';
 import { DocumentService } from './documents.js';
+import { TeamService } from './team.js';
 import { Actions } from './actions.js';
 
-export const operationNames=['inbox_list','inbox_complete','event_create','event_get','event_list','event_select','event_update','task_create','task_start','task_record_result','task_complete','document_generate','document_deliver','reminder_create','reminder_list','reminder_cancel','reminder_reschedule','connections_list','action_prepare','action_get'] as const;
+export const operationNames=['inbox_list','inbox_complete','event_create','event_get','event_list','event_select','event_update','team_invite','task_list','task_edit','task_note','task_history','task_cancel','task_reopen','task_create','task_start','task_record_result','task_complete','document_generate','document_deliver','reminder_create','reminder_list','reminder_cancel','reminder_reschedule','connections_list','action_prepare','action_get'] as const;
 export type Operation = typeof operationNames[number];
 const id=z.string().min(1).max(128).regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/);
 export interface RuntimeConfig {dataDirectory:string;telegramToken:string;encryptionKey:string;publicUrl:string;googleClientId?:string;googleClientSecret?:string;}
@@ -22,6 +23,7 @@ export function createRuntime(config:RuntimeConfig,transport:typeof fetch=fetch)
   const telegram=new TelegramClient(config.telegramToken,transport);
   const connections=new Connections(store,new Vault(config.encryptionKey),config);
   const documents=new DocumentService(store,events,join(config.dataDirectory,'documents'));
+  const team=new TeamService(store);
   const actions=new Actions(store,connections,documents,telegram,events,persistence);
   async function dispatch(owner:string,operation:Operation,input:unknown) {
     store.chat(owner);
@@ -71,6 +73,19 @@ export function createRuntime(config:RuntimeConfig,transport:typeof fetch=fetch)
       if(operation==='reminder_reschedule' && !value.nextAt) throw new Error('nextAt required');
       store.changeReminder(owner,value.reminderId,operation==='reminder_cancel' ? undefined : value.nextAt);return store.reminder(owner,value.reminderId);
     }
+    if(operation==='team_invite') {const v=z.object({eventId:id,userId:z.string().regex(/^\d+$/)}).strict().parse(input);return team.invite(owner,v.eventId,v.userId);}
+    if(operation==='task_list') {const v=z.object({eventId:id}).strict().parse(input);return team.list(owner,v.eventId);}
+    if(operation==='task_edit') return team.edit(owner,input);
+    if(operation==='task_note') return team.note(owner,input);
+    if(operation==='task_history') {const v=z.object({taskId:id}).strict().parse(input);return team.history(owner,v.taskId);}
+    if(operation==='task_cancel' || operation==='task_reopen') {
+      const v=z.object({taskId:id,expectedRevision:z.number().int().nonnegative()}).strict().parse(input);
+      const task=await persistence.tasks.get(v.taskId);if(!task) throw new Error('Task missing');store.authorize(owner,task.eventId);
+      if(operation==='task_reopen' && !['completed','cancelled','failed'].includes(task.status)) throw new Error('Only closed tasks can be reopened');
+      const result=await events.transitionTask(task.id,v.expectedRevision,operation==='task_cancel'?'cancelled':'queued');
+      if(result.ok) {store.db.prepare('UPDATE op_task_expectations SET evidence=NULL WHERE task_id=?').run(task.id);store.audit(owner,operation,task.id);}
+      return result;
+    }
     if(operation==='task_create') {
       const value=z.object({eventId:id,title:z.string().min(1).max(300),dependencyIds:z.array(id).max(50).default([]),outputKind:z.enum(['document','action','budget']).optional()}).strict().parse(input);
       store.authorize(owner,value.eventId);
@@ -118,7 +133,7 @@ export function createRuntime(config:RuntimeConfig,transport:typeof fetch=fetch)
     if(operation==='action_get') {const value=z.object({actionId:z.uuid()}).strict().parse(input);return store.getAction(owner,value.actionId) ?? {status:'NOT_FOUND'};}
     throw new Error('Unsupported operation');
   }
-  return {persistence,events,store,telegram,connections,documents,actions,dispatch,close(){store.close();persistence.close();}};
+  return {persistence,events,store,telegram,connections,documents,actions,team,dispatch,close(){store.close();persistence.close();}};
 }
 export type Runtime=ReturnType<typeof createRuntime>;
 export function configFromEnv(env:NodeJS.ProcessEnv=process.env):RuntimeConfig {
