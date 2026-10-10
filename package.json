@@ -1,0 +1,17 @@
+{
+  "name": "campus-event-agent-prototype",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Deterministic prototype support for the Campus Event Agent WorkBuddy Expert Team.",
+  "type": "module",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "npm run build && node --test dist/tests/**/*.test.js",
+    "demo": "npm run build && node dist/scripts/run-demo.js"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.3"
+  }
+}
