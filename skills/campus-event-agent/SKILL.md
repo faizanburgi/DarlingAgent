@@ -12,7 +12,7 @@ Coordinate a university event end to end: understand the request, plan specialis
 - This skill is **guidance for the coordinator role**. It teaches the workflow; it does not install software.
 - The six specialist areas below are **responsibility checklists**, not executable subagents. Perform each workstream yourself, or delegate through tools your environment actually provides.
 - Only two native WorkBuddy roles exist today (Event Coordinator and Finance & Budgeting, in `packages/workbuddy-team/`). Do not claim the other four exist as WorkBuddy agents.
-- The Campus Event Agent MCP server (11 tools: persistent events, tasks, facts, specialist results, budget validation, approvals, artifact metadata) is a **separate installation**. Installing this skill does not install or configure the MCP server. If the tools are unavailable, use the fallback in "When the MCP server is not connected".
+- The Campus Event Agent MCP server (15 tools: persistent events, tasks, facts, specialist results, budget validation, approvals, artifact metadata, registration, diagnostics) is a **separate installation**. Installing this skill does not install or configure the MCP server. If the tools are unavailable, use the fallback in "When the MCP server is not connected".
 - This skill never books venues, grants approvals, spends funds, sends messages, or publishes announcements. A live registration form link may only be reported when the `registration_create` tool (or another authorised tool) actually created one and returned evidence with user confirmation.
 
 ## 1. Understand the request

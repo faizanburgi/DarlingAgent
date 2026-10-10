@@ -1,86 +1,70 @@
-# Campus Event Agent — Milestone 1 Prototype
+# Campus Event Agent
 
-This repository contains the first working prototype of the Campus Event Agent. It proves a narrow, WorkBuddy-led workflow: an Event Coordinator delegates an event budget to Finance & Budgeting, validates it deterministically, and produces draft event-plan and budget artifacts.
+Campus Event Agent is a specialised event-planning and coordination agent for university clubs, societies, departments, and event organisers. It combines conversational event planning with persistent event and task records, structured tool execution, deterministic budget validation, human approval workflows, and real registration-form creation through the Tally API.
 
-It does **not** claim to book venues, obtain university approval, send messages, spend funds, integrate Telegram, host a website, persist shared multi-channel state, or register itself in WorkBuddy automatically.
+Unlike a general-purpose chatbot, it keeps operational state in SQLite across sessions, enforces task dependencies and approval gates before consequential actions, validates budget arithmetic deterministically rather than by assertion, and returns actual form URLs only after verifying them against the live Tally API.
 
-## Contents
+## What it does
 
-- `skills/campus-event-agent/` — installable agent skill (event-planning guidance; does not install the MCP server).
-- `packages/workbuddy-team/` — native WorkBuddy Expert Team package (Coordinator + Finance).
-- `src/` — deterministic TypeScript support logic, separate from agent prompts.
-- `examples/` — a repeatable demo request.
-- `PROJECT_BRIEF.md.md` — product specification.
+- Turns a natural-language event request into a persistent event record with extracted attendance, budget ceiling, and currency.
+- Plans specialist work across six workstreams (compliance and safety, registration, logistics, marketing and communications, finance and budgeting, work distribution) as structured tasks with explicit dependencies and statuses.
+- Validates budgets deterministically: line-item arithmetic is recalculated and compared against the ceiling, and the result is persisted as a validation snapshot.
+- Gates consequential actions behind explicit human approvals with revision-checked decisions.
+- Drafts registration forms as reviewable specifications, then creates live Tally forms only after explicit user confirmation, verifying each form before reporting it as live.
+- Reports honestly: completed work, drafts, assumptions, missing information, conflicting facts, and checks that could not be verified.
+
+## Current capabilities and limitations
+
+**Working today (implemented and covered by the 46-test automated suite):**
+
+- Persistent events, tasks with dependencies, sourced facts with conflict preservation, specialist results, budget validations, approvals with decisions, and artifact metadata — all in SQLite with revision checks.
+- All 15 MCP tools listed below, including registration drafting, confirmation-gated live Tally form creation, and a read-only Tally connectivity diagnostic.
+- A live Tally connectivity check returning a successful connection has been demonstrated against the real API, and one real registration form has been created, verified, persisted, and retrieved end to end.
+
+**Limitations to take seriously:**
+
+- The coordinator role is guidance plus tools, not an autonomous agent: the six specialist areas are responsibility checklists, and only two native WorkBuddy roles exist (coordinator and finance). There is no parallel multi-agent orchestration in the code.
+- The live Tally demonstration covers connectivity plus one published form. That does not make the workflow production-ready, and every published URL must still be opened and checked individually.
+- The agent cannot book venues, obtain institutional approval, send messages, spend funds, or grant permissions. Anything in these categories is preparation and tracking only, disclosed as such.
+
+## Architecture: skill, MCP server, native roles, and sub-agents
+
+These are four different things. Do not confuse them:
+
+- **MCP server** (`src/adapters/mcp/server.ts`, launched as `campus-event-agent`): the executable capability layer. A local stdio process exposing 15 tools over the Model Context Protocol. This is what does the work.
+- **Skill** (`skills/campus-event-agent/SKILL.md`): installable planning guidance for a compatible AI agent. It teaches the coordinator workflow and documents the MCP tools. Installing the skill does **not** install or configure the MCP server. There are no independently executing sub-agents behind the skill — the specialist sections are checklists the coordinator works through.
+- **Native WorkBuddy Expert Team roles** (`packages/workbuddy-team/agents/`): two role definitions that exist today — the Event Coordinator lead and the Finance & Budgeting specialist — for import into WorkBuddy. They are prompts and handoff contracts, not running software.
+- **Sub-agents**: none are implemented. Do not describe the six workstreams as six running agents.
+
+Supporting layers: a framework-independent core (`src/core/`) with no database, network, or SDK dependencies; a SQLite adapter (`src/adapters/sqlite/`); a Tally REST adapter (`src/adapters/tally/`); startup scripts (`src/scripts/`); and the test suite (`src/tests/`).
 
 ## Prerequisites
 
-- Node.js 20 or newer.
-- npm (or a compatible package manager) for local build/test execution.
-- A WorkBuddy client/account with Expert Team creation or import access for native validation.
+- Node.js 20 or newer (`engines` requires `>=20`).
+- npm for install, build, and test. (On Windows, if bare `npm` resolves to `C:\Windows\System32\npm` instead of Node's npm, invoke `C:\Program Files\nodejs\npm.cmd` explicitly.)
+- A Tally account and API key — only required for live form creation and the connectivity diagnostic. Everything else works without it.
+- A WorkBuddy client/account with Expert Team import access — only required for the native team package in `packages/workbuddy-team/`.
 
-## Local deterministic demo
+## Quick start — OpenCode first
+
+The tested installation path is OpenCode launching the package straight from GitHub. No npm registry release exists, so install from the repository at `https://github.com/zeethdaleel/Workbuddy-Event-Coordinator`, tracking the `main` branch:
 
 ```bash
-npm install
-npm test
-npm run demo
+npx --allow-git=all -y github:zeethdaleel/Workbuddy-Event-Coordinator#main
 ```
 
-The demo writes two local **draft** artifacts into `artifacts/`:
+The `--allow-git=all` flag matters: some npm versions refuse Git dependencies outright (`EALLOWGIT`). Passing the flag to the single `npx` invocation unblocks this install without changing your global npm security configuration — do not lower npm's defaults to accommodate it.
 
-- `event-plan.md`
-- `budget.md`
-
-The local runner is a reproducible deterministic reference implementation. It is not evidence that WorkBuddy has run. Native execution must be validated manually using [the WorkBuddy package README](packages/workbuddy-team/README.md).
-
-## Install from GitHub and run as an MCP server (OpenCode)
-
-No npm registry publishing is required. Install and launch the agent straight
-from the public GitHub repository — replace `OWNER/REPOSITORY` and the tag
-below with the real repository name and release tag once they are known:
+This clones the repository, runs the `prepare` script (TypeScript compile via the bundled compiler), installs production dependencies (`@modelcontextprotocol/server`, `better-sqlite3`, `zod`), and exposes the `campus-event-agent` command. For a persistent install instead of per-launch `npx`:
 
 ```bash
-npx -y github:OWNER/REPOSITORY#v0.1.0
-```
-
-Installing from GitHub clones the repository and runs the `prepare` script,
-which compiles `src/` to `dist/` with the bundled TypeScript compiler, so the
-`campus-event-agent` CLI is available without relying on any local build
-state. Production dependencies (`@modelcontextprotocol/server`,
-`better-sqlite3`, `zod`) are installed automatically; development-only
-packages stay out of the runtime.
-
-To install the CLI persistently instead of using `npx` each time:
-
-```bash
-npm install -g github:OWNER/REPOSITORY#v0.1.0
+npm install -g github:zeethdaleel/Workbuddy-Event-Coordinator#main
 campus-event-agent
 ```
 
-### Database location
+## Complete OpenCode configuration
 
-The server stores its SQLite database **outside** the npm package directory,
-so reinstalls, updates, and cache pruning never delete production data. Set
-an explicit path with `CAMPUS_EVENT_DB_PATH`:
-
-```bash
-CAMPUS_EVENT_DB_PATH=/var/lib/campus-event-agent/campus-events.sqlite campus-event-agent
-```
-
-If `CAMPUS_EVENT_DB_PATH` is unset (or blank), the default per-user location
-is used:
-
-- Windows: `%LOCALAPPDATA%\campus-event-agent\campus-events.sqlite`
-- macOS: `~/Library/Application Support/campus-event-agent/campus-events.sqlite`
-- Linux/other: `$XDG_DATA_HOME/campus-event-agent/campus-events.sqlite`,
-  falling back to `~/.local/share/campus-event-agent/campus-events.sqlite`
-
-Relative `CAMPUS_EVENT_DB_PATH` values resolve against the current working
-directory. The parent directory is created automatically on startup.
-
-### OpenCode configuration
-
-Add a local MCP server entry to `opencode.json` / `opencode.jsonc`:
+Add a local MCP server entry to your global `opencode.json` / `opencode.jsonc` (e.g. `~/.config/opencode/opencode.jsonc`). This exact shape is the tested setup:
 
 ```jsonc
 {
@@ -88,210 +72,118 @@ Add a local MCP server entry to `opencode.json` / `opencode.jsonc`:
   "mcp": {
     "campus-event-agent": {
       "type": "local",
-      "command": ["npx", "-y", "github:OWNER/REPOSITORY#v0.1.0"],
+      "command": [
+        "npx",
+        "--allow-git=all",
+        "-y",
+        "github:zeethdaleel/Workbuddy-Event-Coordinator#main"
+      ],
       "environment": {
-        "CAMPUS_EVENT_DB_PATH": "/var/lib/campus-event-agent/campus-events.sqlite"
+        "CAMPUS_EVENT_DB_PATH": "C:/Users/you/AppData/Local/campus-event-agent/events.sqlite",
+        "TALLY_API_KEY": "{file:~/.campus-tally-key}"
       },
-      "enabled": true
+      "timeout": 120000
     }
   }
 }
-```
-
-Use an absolute database path so the location does not depend on OpenCode's
-working directory. Alternatively, install the package globally once and use
-`"command": ["campus-event-agent"]` with the same `environment` block.
-
-On Windows, set the variable persistently before launching OpenCode, or put
-it in the `environment` block with escaped backslashes:
-
-```powershell
-setx CAMPUS_EVENT_DB_PATH "$env:LOCALAPPDATA\campus-event-agent\campus-events.sqlite"
-```
-
-```jsonc
-"environment": {
-  "CAMPUS_EVENT_DB_PATH": "C:\\Users\\you\\AppData\\Local\\campus-event-agent\\campus-events.sqlite"
-}
-```
-
-Single backslashes are invalid JSON — always double them. Server logs go to
-stderr; stdout is reserved for MCP protocol traffic.
-
-## Install the skill with Skills CLI
-
-The skill teaches a compatible AI agent how to plan and coordinate campus
-events. It is distributed from the public GitHub repository through the
-[`skills` CLI](https://github.com/vercel-labs/skills) — replace
-`OWNER/REPOSITORY` with the real repository name once it is known. These
-commands were verified against the official CLI reference; only the
-repository placeholder is still unknown:
-
-```bash
-npx skills add OWNER/REPOSITORY --list
-```
-
-```bash
-npx skills add OWNER/REPOSITORY --skill campus-event-agent -a opencode -a codex -a claude-code -a cursor -a windsurf
-```
-
-```bash
-npx skills add OWNER/REPOSITORY --skill campus-event-agent -g -a opencode -a codex -a claude-code -a cursor -a windsurf
 ```
 
 Notes:
 
-- `--list` (short form `-l`) lists the repository's skills without installing.
-- `--skill` (short form `-s`) selects the `campus-event-agent` skill by the
-  `name` in its `SKILL.md` frontmatter. The skill lives at
-  `skills/campus-event-agent/SKILL.md`, which is one of the CLI's standard
-  discovery locations.
-- `-a` / `--agent` targets specific agents. The identifiers `opencode`,
-  `codex`, `claude-code`, `cursor`, and `windsurf` are all supported by the
-  CLI. Without `-a`, the CLI auto-detects installed agents or prompts.
-- `-g` / `--global` installs to your user directory instead of the project.
-- Add `-y` / `--yes` for non-interactive installation.
-- Installing the skill does **not** install or configure the MCP server.
-  Follow "Register the MCP server in compatible clients" below for the tools.
+- `command` is an array: executable followed by arguments. Keep `--allow-git=all` so the GitHub install is not blocked.
+- `environment` sets variables on the spawned server process only. `CAMPUS_EVENT_DB_PATH` selects the database (see next section). `TALLY_API_KEY` enables live Tally features; the `{file:…}` form reads the key from a file at startup so the secret never sits in the config. Replace the example database path with your own absolute path.
+- `timeout` is the MCP startup timeout in milliseconds. `120000` is appropriate here because first launch may compile and install before responding.
+- Windows paths in JSON need either forward slashes (as above — accepted) or correctly escaped backslashes (`C:\\Users\\you\\…`). Single backslashes are invalid JSON and produce parsing errors.
+- When pasting configuration from chat, copy raw JSON without Markdown code fences — fences pasted into the file are a common source of JSON parsing errors.
 
-## Register the MCP server in compatible clients
+## Database configuration and persistence
 
-Prerequisites: Node.js 20 or newer, and an explicit database location via
-`CAMPUS_EVENT_DB_PATH` (see "Database location" above). The server runs as a
-local stdio process; logs go to stderr and MCP traffic stays on stdout.
+`CAMPUS_EVENT_DB_PATH` selects the SQLite database, resolved at startup by `src/scripts/db-path.ts`:
 
-The simplest repeatable setup is the GitHub invocation (replace
-`OWNER/REPOSITORY` and the tag once known):
+- If set to an absolute path, that path is used as-is.
+- If set to a relative path, it resolves against the server process's working directory — which is why an **explicit absolute path is recommended** in MCP configuration.
+- If unset or blank, a per-user default outside the npm package/install/cache directories is used, so reinstalls and cache pruning never delete production data:
+  - Windows: `%LOCALAPPDATA%\campus-event-agent\campus-events.sqlite`
+  - macOS: `~/Library/Application Support/campus-event-agent/campus-events.sqlite`
+  - Linux/other: `$XDG_DATA_HOME/campus-event-agent/campus-events.sqlite`, falling back to `~/.local/share/campus-event-agent/campus-events.sqlite`
 
-```text
-command: npx -y github:OWNER/REPOSITORY#v0.1.0
-env: CAMPUS_EVENT_DB_PATH=<absolute-path-to>/campus-events.sqlite
-```
+The parent directory is created automatically. **Different database paths are fully separate application states**: an event created under one path is invisible under another. The most common cause of a "missing event" (`not_found`) is the client pointing at a different database file than the one holding the event — check `CAMPUS_EVENT_DB_PATH` first. All server logs go to stderr; stdout is reserved for MCP protocol traffic.
 
-Per-client wiring:
+## Tally setup and registration workflow
 
-- **OpenCode** — see "OpenCode configuration" above.
-- **Claude Code** — `claude mcp add --env CAMPUS_EVENT_DB_PATH=<absolute-path> --transport stdio campus-event-agent -- npx -y github:OWNER/REPOSITORY#v0.1.0`
-- **Codex** — `codex mcp add campus-event-agent --env CAMPUS_EVENT_DB_PATH=<absolute-path> -- npx -y github:OWNER/REPOSITORY#v0.1.0`, or add an `[mcp_servers.campus-event-agent]` table with `command`, `args`, and `env` to `config.toml`.
-- **Cursor** — add to `.cursor/mcp.json` (project) or `~/.cursor/mcp.json` (global):
-  ```json
-  {
-    "mcpServers": {
-      "campus-event-agent": {
-        "command": "npx",
-        "args": ["-y", "github:OWNER/REPOSITORY#v0.1.0"],
-        "env": { "CAMPUS_EVENT_DB_PATH": "<absolute-path>/campus-events.sqlite" }
-      }
-    }
-  }
+The server integrates with the [Tally API](https://developers.tally.so/) (`POST /forms` to create, `GET /forms/{formId}` to verify, Bearer-token authentication, 100 requests/minute limit). Supply `TALLY_API_KEY` at runtime only — environment variable or the client's documented file-substitution mechanism. Never commit it, never pass it as a tool argument, never paste it into prompts: the implementation sends it solely as an `Authorization` header and never returns it in tool results, logs, or errors.
+
+Without a key, drafting and retrieval keep working while creation reports `tally_not_configured`. With a key, follow the workflow in order:
+
+1. **Create or retrieve an event** (`event_create`, `event_get`).
+2. **Prepare a registration draft** (`registration_draft` with optional `capacity`, `deadline`, and `includeStudentId` / `includeDietary` / `includeAccessibility` / `includeConsent` flags). The draft is a reviewable specification plus any missing requirements (unknown capacity or deadline). Drafting is offline and never creates a live form.
+3. **Review and confirm the specification** with the user. The default fields are full name (required), email (required), and phone (optional); sensitive fields stay optional and the server refuses to make them mandatory.
+4. **Create the form only after explicit confirmation**: `registration_create` with a `registrationId` and `confirmed: true` (the flag defaults to `false`, and an unconfirmed call returns the draft instead of creating anything). Creation refuses duplicates — one live form per event (`duplicate_id`) — then verifies the returned form (matching ID, `PUBLISHED` status, not closed) before persisting only metadata: external form ID, URL, status, spec hash, timestamps. No keys, submissions, or personal data are stored.
+5. **Retrieve stored metadata** any time with `registration_get`.
+6. **Verify the published URL separately** by opening it. A successful creation proves the API accepted and returned the form; it does not prove the public page renders — check each URL individually.
+
+To check readiness before promising anything, run `tally_verify_connection`: one authenticated `GET /forms` whose listing body is discarded. It returns `{ connected: true }`, `tally_not_configured`, `tally_auth`, or another connection error — and nothing else. A success proves the key is accepted; it says nothing about any particular form.
+
+## Available MCP tools
+
+Verified against `src/adapters/mcp/server.ts` (IDs: 1–128 characters, start with a letter or digit, letters/numbers/`.`, `_`, `-` only):
+
+- Event: `event_create` (brief → persistent draft workflow), `event_get` (workflow plus full summary), `event_update_facts` (sourced estimates or confirmed facts; contradictions are preserved as conflicting, never overwritten).
+- Tasks: `task_create` (bounded task with optional same-event dependencies), `task_submit_result` (structured specialist result with evidence and unresolved issues), `task_transition` (lifecycle, dependency, approval, and revision checks), `event_list_tasks` (statuses, dependencies, submitted results).
+- Budget: `budget_validate` (deterministic validation snapshot of the event's itemised budget against its ceiling).
+- Approvals: `approval_request` (records a pending request; executes nothing), `approval_record_decision` (`approved` / `rejected` / `expired`, revision-checked).
+- Artifacts: `artifact_get` (draft artifact metadata; file contents never exposed).
+- Registration: `registration_draft`, `registration_create`, `registration_get` (see workflow above).
+- Diagnostics: `tally_verify_connection` (read-only connectivity probe; see above).
+
+Failures use explicit reasons (`not_found`, `duplicate_id`, `revision_conflict`, `invalid_transition`, `approval_required`, `dependency_unmet`, `file_not_written`, `conflicting_fact`, `confirmation_required`, `tally_not_configured`, `tally_auth`, `tally_rate_limited`, `tally_timeout`, `tally_unavailable`, `tally_malformed`, `tally_unverified`) instead of silent retries.
+
+## Skills and WorkBuddy Expert Team setup
+
+- **Skill** (`skills/campus-event-agent/`, name `campus-event-agent`): installable planning guidance for compatible agents. List and install from the real repository with the Skills CLI:
+  ```bash
+  npx skills add zeethdaleel/Workbuddy-Event-Coordinator --list
+  npx skills add zeethdaleel/Workbuddy-Event-Coordinator --skill campus-event-agent -a opencode -a codex -a claude-code -a cursor -a windsurf
   ```
-- **Windsurf** — same `mcpServers` entry in `~/.codeium/windsurf/mcp_config.json` (macOS/Linux) or `%USERPROFILE%\.codeium\windsurf\mcp_config.json` (Windows), then restart Windsurf.
+  Add `-g` for a global (user-directory) install, `-y` to skip prompts. Installing the skill does not install or configure the MCP server — set up the server separately as above.
+- **WorkBuddy team** (`packages/workbuddy-team/`): native role definitions (Event Coordinator lead, Finance & Budgeting specialist), avatars, and import notes in its own README. Validate the import flow in your WorkBuddy client; the package claims no automatic registration.
+- **Other MCP clients** (compatibility guidance, OpenCode remains the tested path): use the same GitHub invocation with each client's stdio-server format —
+  - Claude Code: `claude mcp add --env CAMPUS_EVENT_DB_PATH=<absolute-path> --transport stdio campus-event-agent -- npx --allow-git=all -y github:zeethdaleel/Workbuddy-Event-Coordinator#main`
+  - Codex: `codex mcp add campus-event-agent --env CAMPUS_EVENT_DB_PATH=<absolute-path> -- npx --allow-git=all -y github:zeethdaleel/Workbuddy-Event-Coordinator#main`
+  - Cursor (`.cursor/mcp.json`) / Windsurf (`mcp_config.json`): an `mcpServers` entry with `command: npx`, matching `args`, and an `env` block. Add `TALLY_API_KEY` to the same `env` block where live forms are needed.
 
-Alternatively, install the package globally once (`npm install -g github:OWNER/REPOSITORY#v0.1.0`) and use `campus-event-agent` as the command with the same environment block.
-
-## Registration forms and Tally
-
-The MCP server integrates with the [Tally API](https://developers.tally.so/)
-(`POST /forms` to create, `GET /forms/{formId}` to verify; Bearer-token auth;
-100 requests/minute limit) to create real registration forms and return their
-actual URLs. Verified capabilities and limits are documented from the
-official API reference; anything else is reported as an explicit limitation.
-
-Available tools: `registration_draft` (reviewable specification; never
-creates a live form), `registration_create` (requires `confirmed: true` plus
-a configured key), `registration_get` (stored metadata and verified
-URL), and `tally_verify_connection` (read-only connectivity diagnostic;
-creates, reads, and returns no form data). Creation verifies the returned
-form (matching ID, `PUBLISHED` status,
-not closed) before persisting, refuses duplicates per event, and never
-reports a form as live without that verification.
-
-### Tally account prerequisites
-
-- A Tally account (the API is free on all plans) and an API key from the
-  account's API-keys dashboard. Keys inherit the issuing user's permissions;
-  Tally documents no scoped or least-privilege keys, so **one central Tally
-  account owns every form**: whoever holds that account controls the forms,
-  sees all submissions, consumes the account's quotas, and sets data
-  retention. Plan account access and handover accordingly.
-- The key is server-side configuration only. Set `TALLY_API_KEY` in the
-  environment that launches the MCP server (for example the client's
-  `environment`/`env` block alongside `CAMPUS_EVENT_DB_PATH`). Never commit
-  the key, never pass it as a tool argument, and never paste it into prompts:
-  it is sent solely as an `Authorization` header and never appears in tool
-  responses, logs, errors, or artifacts.
-
-### Workflow
-
-1. `registration_draft` with the event ID (plus optional `capacity`,
-   `deadline`, and `includeStudentId`/`includeDietary`/`includeAccessibility`/`includeConsent`
-   flags) returns the field specification and any missing requirements.
-2. Review the draft with the user and collect the missing details.
-3. `registration_create` with the same inputs, a `registrationId`, and
-   `confirmed: true`. Without confirmation it returns the draft for review
-   and creates nothing.
-4. The server verifies the form, stores only its metadata (external form ID,
-   URL, status, spec hash, timestamps — no keys, no submissions, no personal
-   data), and returns the actual `https://tally.so/r/{formId}` URL.
-5. `registration_get` retrieves the stored metadata at any time.
-
-Sensitive fields (student ID, dietary, accessibility, consent) default to
-optional and are never made mandatory by the server. Local testing uses
-mocked HTTP responses (`registration-tally.test.js`); **live form creation
-has not been tested against a real Tally account**, so confirm the first
-real form (URL opens, questions render, submissions arrive) before relying
-on it.
-
-### Connectivity diagnostic
-
-`tally_verify_connection` checks Tally API connectivity without touching
-any form. It issues one authenticated `GET /forms` request and returns a
-minimal result: `{ connected: true }`, an authentication failure
-(`tally_auth`), a missing-configuration report (`tally_not_configured`),
-or another connection error (`tally_rate_limited`, `tally_timeout`,
-`tally_unavailable`, `tally_malformed`). Safety guarantees:
-
-- Read-only: a single `GET` against the documented form-listing endpoint.
-  No form is created, published, updated, or deleted.
-- Minimal output: the listing body is discarded, never stored or returned.
-  Responses carry no form names, IDs, submissions, or personal data.
-- The API key travels only as an `Authorization` header and never appears
-  in the result, logs, or errors.
-- It takes no arguments and needs no event, so it works before any form
-  exists. A success proves the key is accepted; it does not prove a
-  specific form's URL works — verify each published URL by opening it.
-
-## Local MCP server (development checkout)
-
-The local stdio MCP adapter exposes the persistent application service; it does not run an autonomous agent or perform external actions. Set an explicit database path, then start it:
+## Development, build, tests, and local demo
 
 ```bash
-CAMPUS_EVENT_DB_PATH=./data/campus-events.sqlite npm run mcp
+npm install
+npm run build   # tsc -p tsconfig.json
+npm test        # build, then node --test dist/tests/**/*.test.js
+npm run demo    # deterministic prototype: writes artifacts/event-plan.md and artifacts/budget.md
+npm run mcp     # build, then start the stdio server (uses CAMPUS_EVENT_DB_PATH)
 ```
 
-On Windows PowerShell: `$env:CAMPUS_EVENT_DB_PATH = '.\\data\\campus-events.sqlite'; npm run mcp`.
+The suite (46 tests) covers the event/task/approval lifecycle, persistence contracts and revision conflicts, the registration workflow with mocked Tally responses (success, auth, rate-limit, timeout, malformed), key-leakage checks, the connectivity diagnostic, skill packaging, and CLI startup configuration. The demo request in `examples/networking-event-request.md` ("Organise a university networking event for 50 attendees within RM1,500…") produces a draft RM1,360 budget with passing checks while leaving venue, approvals, and quotations explicitly unverified. Broader product background lives in `PROJECT_BRIEF.md.md`. Product specification lives in `PROJECT_BRIEF.md.md`.
 
-Configure a compatible MCP client to launch `node`, with arguments `dist/scripts/run-mcp.js`, and the `CAMPUS_EVENT_DB_PATH` environment variable (plus `TALLY_API_KEY` to enable live form creation; without it, `registration_create` reports `tally_not_configured` while drafting and retrieval keep working). The available tools are `event_create`, `event_get`, `event_update_facts`, `task_create`, `task_submit_result`, `task_transition`, `budget_validate`, `event_list_tasks`, `approval_request`, `approval_record_decision`, `artifact_get`, `registration_draft`, `registration_create`, `registration_get`, and `tally_verify_connection`. Logs go to stderr; stdout is reserved for MCP protocol traffic.
+## Troubleshooting
 
-## Tests
+- **npm refuses the GitHub install (`EALLOWGIT`).** Use `npx --allow-git=all -y github:zeethdaleel/Workbuddy-Event-Coordinator#main` for that invocation. Do not change global npm security settings.
+- **OpenCode reports the MCP server unavailable or times out at startup.** Confirm the `command` array runs by hand, raise the entry's `timeout` (e.g. `120000`) since first launch compiles and installs, and check the client's MCP output for the server's stderr lines (`[campus-event-mcp] …`), which state the database path and whether Tally is enabled.
+- **JSON parsing errors in configuration.** Strip Markdown fences before pasting, and use forward slashes or doubled backslashes in Windows paths.
+- **`tally_not_configured`.** `TALLY_API_KEY` is absent from the launching environment. Add it to the entry's `environment` (or a `{file:…}` reference) and restart the server process.
+- **Tally authentication failures (`tally_auth`).** The key is missing, revoked, or pasted with extra whitespace. Re-copy it from the Tally dashboard into the secret store (never into chat or the repo) and retry once — repeated 401s count against the rate limit.
+- **Event missing (`not_found`) right after creating it.** You are almost certainly looking at a different database file: compare `CAMPUS_EVENT_DB_PATH` across the creating and reading configurations. Separate paths mean separate state.
+- **Behavior does not match the latest `main`.** `npx` caches the downloaded package, so a stale cache can pin an old build (symptom: the tool list lacks `tally_verify_connection`). Refresh the cached install for this package before deeper debugging; only clear cache entries you can re-download, since the next launch refetches them.
+- **Connectivity check passes but a form URL misbehaves.** These are different claims: the diagnostic proves key acceptance, not that a specific page renders. Open each published URL individually.
 
-The automated suite covers:
+## Security considerations
 
-- budget total calculation;
-- over-budget detection;
-- missing attendee/budget inputs;
-- validation failure while preserving draft artifacts;
-- registration draft generation and missing requirements;
-- confirmation gating and duplicate prevention;
-- mocked Tally success, auth, rate-limit, timeout, and malformed responses;
-- registration metadata persistence and key-leakage checks.
+- `TALLY_API_KEY` is runtime-only configuration. It travels solely as an `Authorization` header and never appears in tool results, logs, errors, artifacts, or the database.
+- Tally documents no scoped keys: each key inherits its user's permissions, so one central Tally account owns every form created through it — including visibility into all submissions, quota consumption, and retention. Plan account access and handover deliberately.
+- Registration collects the minimum by default; sensitive fields are optional unless the organiser justifies them, and only form metadata (never submissions or personal data) is persisted.
+- Do not commit credentials, event attendee data, or private sample data. `.env` files are git-ignored; `.env.example` documents variable names only.
 
-## WorkBuddy compatibility and verification
+## Roadmap and known limitations
 
-The team manifest uses the fields documented for Expert Teams: `plugin.json`, a lead, member list, agent definitions, role avatars, and an Education category. The exact import UI and `settings.json` schema depend on the installed WorkBuddy environment and need validation. See [packages/workbuddy-team/README.md](packages/workbuddy-team/README.md).
+Planned, not implemented: executable specialist sub-agents beyond the two native WorkBuddy roles, parallel orchestration, Telegram and web interfaces, npm registry publishing, external connectors beyond Tally, venue bookings, production authentication, and interactive selection UI in clients (today's MCP surface is text-in/text-out; richer picking controls are a UX aspiration, not a feature).
 
-Do not add credentials to this repository. The prototype has no external credentials or API calls of its own; the optional `TALLY_API_KEY` is supplied at runtime through the environment and never committed.
-
-## Next scope, deliberately deferred
-
-Five remaining specialists, shared persistence, Telegram, web UI, npm registry publishing, external connectors, bookings, and production authentication are deferred until the native WorkBuddy execution path is proven. Direct GitHub installation (`npx -y github:OWNER/REPOSITORY#v0.1.0`) is supported; only the npm registry release is deferred. Live Tally form creation is implemented but untested against a real account (see "Registration forms and Tally").
+Known limitations: the deterministic prototype budget is illustrative rather than quoted; multi-channel shared state is not implemented; the WorkBuddy import flow depends on the installed client's UI and needs manual validation. Live Tally use is demonstrated but not production-hardened — keep confirming each published form by opening it.

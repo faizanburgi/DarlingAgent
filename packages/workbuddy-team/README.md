@@ -4,10 +4,11 @@ This is the native Expert Team artifact for Milestone 1. It contains an Event Co
 
 ## Package contents
 
-- `.codebuddy-plugin/plugin.json` — documented Expert Team manifest.
 - `agents/` — coordinator and finance role instructions with explicit handoffs.
 - `avatars/` — 512 × 512 PNG role images.
 - `settings.json` — included because the current Expert Team structure documents it as required; its schema was not established by the retrieved documentation and must be validated in WorkBuddy.
+
+No `.codebuddy-plugin/plugin.json` manifest is shipped in this directory. The official Expert documentation describes that manifest path, so confirm which package layout your installed WorkBuddy client expects before importing.
 
 ## Manual WorkBuddy validation
 
