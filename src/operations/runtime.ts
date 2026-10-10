@@ -92,6 +92,8 @@ export function createRuntime(config:RuntimeConfig,transport:typeof fetch=fetch)
       } else if(expected.output_kind==='action') {
         const action=store.getAction(owner,value.evidenceId ?? '');
         if(!action || action.event_id!==task.eventId || action.status!=='COMPLETED' || !action.evidence) throw new Error('Completed action evidence required');
+        const current=await events.getEvent(task.eventId);
+        if(!current.ok || JSON.parse(action.payload).eventRevision!==current.value.revision) throw new Error('Action belongs to an older event revision');
         evidence={actionId:action.id,result:JSON.parse(action.evidence)};
       } else {
         const event=await events.getEvent(task.eventId);

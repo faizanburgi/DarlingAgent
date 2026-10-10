@@ -33,6 +33,8 @@ export class Actions {
     else if(kind==='drive') {
       const data=z.object({documentId:z.uuid()}).strict().parse(input);const bytes=await this.documents.read(owner,data.documentId); if(bytes.length>5*1024*1024) throw new Error('Drive multipart upload requires a document at most 5 MiB');payload={...data,sha256:hash(bytes)};
     } else throw new Error('Unsupported capability');
+    const snapshot=await this.events.getEvent(event);if(!snapshot.ok) throw new Error('Event missing');
+    payload={...(payload as Record<string,unknown>),eventRevision:snapshot.value.revision};
     const action=this.store.action(owner,event,kind,payload);
     this.store.db.prepare("UPDATE op_actions SET status='WAITING_FOR_CONNECTION' WHERE id=?").run(action.id);
     return this.review(owner,action.id);
