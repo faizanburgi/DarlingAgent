@@ -2,9 +2,17 @@
 
 **One Prompt. One Goal. End-to-End Execution.**
 
-DarlingAgent is a WorkBuddy-led event operations project with a persistent TypeScript backend. This branch adds an authenticated operations service, real proposal PDFs, Telegram delivery adapters, durable reminders, encrypted account connections and approval-gated provider actions to the existing prototype.
+DarlingAgent is a **local-first WorkBuddy Expert** for event planning. WorkBuddy supplies reasoning and calls a local MCP server for persistent events, dependency tasks, budget validation, registration drafts and real proposal PDFs. Tally publication requires configuration and explicit approval; email uses an available native connector or remains an unsent draft.
 
-**This is an implementation increment, not a finished autonomous product.** The code is locally tested; WorkBuddy live execution, live provider accounts and cloud deployment have not been verified. Full team operations, vendor research and several requested capabilities remain incomplete. See the [honest capability ledger](docs/STATUS.md).
+Start with [the local Expert installation guide](packages/darlingagent-expert/README.md) and [the MVP verification record](docs/LOCAL_MVP.md). The earlier hosted backend, Telegram bot, reminder worker and OAuth implementation are preserved but are not required for this hackathon workflow.
+
+```sh
+npm ci
+npm test
+npm run expert:package
+```
+
+Install `artifacts/darlingagent-expert` through WorkBuddy's native expert-manager, connect its local stdio configuration, then summon DarlingAgent from My Experts. No system-prompt pasting is needed per event.
 
 ## Start here
 
@@ -27,7 +35,7 @@ node dist/scripts/demo-operations.js artifacts/operations
 
 The offline demonstration creates two real PDFs and verification JSON for different event types, attendance and budgets. No external service is contacted. Costs are explicitly illustrative estimates. `npm run demo` retains the old Markdown demonstration, now with a parsed title and attendance-scaled sample estimates. WorkBuddy should use structured inputs for real planning.
 
-## Architecture
+## Preserved hosted architecture (not required for the MVP)
 
 ```text
 WorkBuddy desktop (understanding, planning, tool selection)

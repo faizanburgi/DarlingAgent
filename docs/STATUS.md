@@ -1,3 +1,7 @@
+# Current hackathon priority
+
+The local-first Expert implementation and its verification limits are tracked in [LOCAL_MVP.md](LOCAL_MVP.md). The ledger below describes the preserved hosted operations increment. Cloud/Telegram/OAuth work is paused by user direction.
+
 # Capability and verification ledger
 
 This is a tested implementation increment, **not completion of the full 2.0 specification**. No cloud deployment, live external send/publication, native WorkBuddy run or laptop-off demonstration has been performed.

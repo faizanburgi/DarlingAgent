@@ -1,3 +1,7 @@
+# Preserved earlier team design
+
+For the hackathon, install the new [DarlingAgent local Expert](../darlingagent-expert/README.md). This earlier team/hosted setup is preserved as development history and is not required.
+
 # DarlingAgent WorkBuddy desktop setup
 
 The existing role prompts and avatars are preserved. **This directory is not a verified importable Expert Team package.** Its prior README referred to `.codebuddy-plugin/plugin.json`, but that file is absent in the source repository. `settings.json` is empty and its native schema has not been validated. Do not promise a one-command native import.

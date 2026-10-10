@@ -1,3 +1,4 @@
+import { registerLocalDeliverables } from "./local-deliverables.js";
 import { structuredEventSchema } from "../../core/structured-event.js";
 import { McpServer } from "@modelcontextprotocol/server";
 import { serveStdio } from "@modelcontextprotocol/server/stdio";
@@ -30,11 +31,12 @@ export function createLocalMcpApplication(databasePath: string, options: LocalMc
   const registration = new RegistrationService(store, options.tally);
   const server = new McpServer({ name: "campus-event-agent", version: "0.1.0" });
   registerTools(server, service, registration);
+  const local=registerLocalDeliverables(server,service,databasePath);
   return {
     server,
     service,
     registration,
-    async close() { await server.close(); store.close(); }
+    async close() { await server.close(); local.close(); store.close(); }
   };
 }
 
@@ -157,7 +159,7 @@ function result<T>(outcome: ServiceResult<T>, success: string) {
 }
 
 function ok(value: unknown, summary: string) {
-  return { content: [{ type: "text" as const, text: summary }], structuredContent: { ok: true, value } };
+  return { content: [{ type: "text" as const, text: `${summary}\n${JSON.stringify(value)}` }], structuredContent: { ok: true, value } };
 }
 
 function failure(outcome: Exclude<ServiceResult<unknown>, { ok: true; value: unknown }>) {
