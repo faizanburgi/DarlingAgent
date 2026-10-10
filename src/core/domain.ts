@@ -71,6 +71,8 @@ export interface PersistedApproval {
   id: string;
   revision: number;
   eventId: string;
+  /** Optional because some approvals apply to an event rather than one task. */
+  taskId?: string;
   action: string;
   status: ApprovalStatus;
 }
