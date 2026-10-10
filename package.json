@@ -9,10 +9,22 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "prepare": "npm run build",
+    "prepack": "npm run build",
     "test": "npm run build && node --test dist/tests/**/*.test.js",
     "demo": "npm run build && node dist/scripts/run-demo.js",
     "mcp": "npm run build && node dist/scripts/run-mcp.js"
   },
+  "bin": {
+    "campus-event-agent": "dist/scripts/run-mcp.js"
+  },
+  "files": [
+    "dist/**/*",
+    "skills/**/*",
+    "README.md",
+    "packages/workbuddy-team/**/*",
+    ".env.example"
+  ],
   "devDependencies": {
     "@modelcontextprotocol/client": "2.3.1",
     "@types/better-sqlite3": "^9.6.0",
