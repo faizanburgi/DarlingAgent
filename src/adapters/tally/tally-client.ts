@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { TallyBlock } from "../../core/registration.js";
-import type { TallyCreatedForm, TallyFailure, TallyFetchedForm, TallyFormProvider, TallyResult } from "../../core/ports/tally.js";
+import type { TallyConnectionResult, TallyCreatedForm, TallyFailure, TallyFetchedForm, TallyFormProvider, TallyResult } from "../../core/ports/tally.js";
 
 const TALLY_BASE_URL = "https://api.tally.so";
 const DEFAULT_TIMEOUT_MS = 15000;
@@ -77,6 +77,35 @@ export class TallyClient implements TallyFormProvider {
     });
   }
 
+  /**
+   * Read-only connectivity probe. Issues an authenticated GET against the
+   * form-listing endpoint and discards the listing: a 2xx status proves the
+   * key is accepted, and no form content is retained or returned.
+   */
+  async verifyConnection(): Promise<TallyConnectionResult> {
+    let response: Response;
+    try {
+      response = await this.fetchImpl(`${this.baseUrl}/forms`, {
+        method: "GET",
+        headers: {
+          // The key travels only in this header; nothing below echoes it.
+          Authorization: `Bearer ${this.apiKey}`
+        },
+        signal: AbortSignal.timeout(this.timeoutMs)
+      });
+    } catch (error) {
+      return { ok: false, failure: error instanceof DOMException && error.name === "TimeoutError" ? { kind: "timeout" } : { kind: "network" } };
+    }
+    const failure = classifyStatus(response.status, response.headers);
+    if (failure !== undefined) return { ok: false, failure };
+    try {
+      await response.arrayBuffer();
+    } catch {
+      return { ok: false, failure: { kind: "malformed", status: response.status } };
+    }
+    return { ok: true, connected: true };
+  }
+
   private async request<T>(path: string, init: { method: "GET" | "POST"; body?: unknown; schema: z.ZodType<T> }): Promise<TallyResult<T>> {
     let response: Response;
     try {
@@ -93,11 +122,8 @@ export class TallyClient implements TallyFormProvider {
     } catch (error) {
       return { ok: false, failure: error instanceof DOMException && error.name === "TimeoutError" ? { kind: "timeout" } : { kind: "network" } };
     }
-    if (response.status === 401 || response.status === 403) return { ok: false, failure: { kind: "auth", status: response.status } };
-    if (response.status === 404) return { ok: false, failure: { kind: "not_found", status: 404 } };
-    if (response.status === 429) return { ok: false, failure: { kind: "rate_limited", status: 429, ...(parseRetryAfterMs(response.headers.get("retry-after")) ?? {}) } };
-    if (response.status === 400 || response.status === 422) return { ok: false, failure: { kind: "bad_request", status: response.status } };
-    if (response.status < 200 || response.status >= 300) return { ok: false, failure: { kind: "server", status: response.status } };
+    const failure = classifyStatus(response.status, response.headers);
+    if (failure !== undefined) return { ok: false, failure };
     let payload: unknown;
     try {
       payload = await response.json();
@@ -108,6 +134,16 @@ export class TallyClient implements TallyFormProvider {
     if (!parsed.success) return { ok: false, failure: { kind: "malformed", status: response.status } };
     return { ok: true, form: parsed.data };
   }
+}
+
+/** Maps an HTTP status to a key-safe failure, or undefined for 2xx success. */
+function classifyStatus(status: number, headers: Headers): TallyFailure | undefined {
+  if (status === 401 || status === 403) return { kind: "auth", status };
+  if (status === 404) return { kind: "not_found", status: 404 };
+  if (status === 429) return { kind: "rate_limited", status: 429, ...(parseRetryAfterMs(headers.get("retry-after")) ?? {}) };
+  if (status === 400 || status === 422) return { kind: "bad_request", status };
+  if (status < 200 || status >= 300) return { kind: "server", status };
+  return undefined;
 }
 
 /** Builds a client from server-side configuration; undefined when not configured. */

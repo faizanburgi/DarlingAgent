@@ -100,6 +100,7 @@ When the MCP server is connected, use its tools instead of in-conversation track
 | `registration_draft` | Build a reviewable registration specification (fields, capacity, missing requirements). Never creates a live form. |
 | `registration_create` | Create the live Tally form. Requires explicit confirmation (`confirmed: true`) and a configured `TALLY_API_KEY`; without confirmation it returns the draft for review. |
 | `registration_get` | List stored registration form metadata and verified URLs. |
+| `tally_verify_connection` | Verify Tally API connectivity with a read-only authenticated request. Creates, reads, and returns no form data; use it before promising live form creation. |
 
 Always read `event_get` before acting on an existing event. Pass the current revision to transitions and decisions; on `revision_conflict`, re-read and retry deliberately. Report tool failures with their reason (`not_found`, `duplicate_id`, `revision_conflict`, `approval_required`, `dependency_unmet`, `conflicting_fact`, and others) rather than retrying blindly.
 

@@ -37,7 +37,12 @@ export interface TallyFailure {
 
 export type TallyResult<T> = { ok: true; form: T } | { ok: false; failure: TallyFailure };
 
+/** Minimal connectivity outcome. Carries no form data, headers, or credentials. */
+export type TallyConnectionResult = { ok: true; connected: true } | { ok: false; failure: TallyFailure };
+
 export interface TallyFormProvider {
   createForm(blocks: TallyBlock[], submissionsLimit?: number): Promise<TallyResult<TallyCreatedForm>>;
   getForm(formId: string): Promise<TallyResult<TallyFetchedForm>>;
+  /** Authenticated read-only probe. Must never create, modify, or return form data. */
+  verifyConnection(): Promise<TallyConnectionResult>;
 }

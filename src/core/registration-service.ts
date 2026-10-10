@@ -69,6 +69,18 @@ export class RegistrationService {
     if (await this.store.events.get(eventId) === undefined) return { ok: false, reason: "not_found" };
     return { ok: true, value: { forms: await this.store.registrationForms.listByEvent(eventId) } };
   }
+
+  /**
+   * Read-only connectivity diagnostic. Probes the Tally API with an
+   * authenticated form-listing request; creates, reads, and returns no
+   * form data, only the connection outcome.
+   */
+  async verifyTallyConnection(): Promise<ServiceResult<{ connected: true }>> {
+    if (this.tally === undefined) return { ok: false, reason: "tally_not_configured" };
+    const probed = await this.tally.verifyConnection();
+    if (!probed.ok) return { ok: false, reason: mapTallyFailure(probed.failure.kind) };
+    return { ok: true, value: { connected: true as const } };
+  }
 }
 
 function mapTallyFailure(kind: TallyFailureKind): Extract<ServiceResult<PersistedRegistrationForm>, { ok: false }>["reason"] {

@@ -199,8 +199,10 @@ official API reference; anything else is reported as an explicit limitation.
 
 Available tools: `registration_draft` (reviewable specification; never
 creates a live form), `registration_create` (requires `confirmed: true` plus
-a configured key), and `registration_get` (stored metadata and verified
-URL). Creation verifies the returned form (matching ID, `PUBLISHED` status,
+a configured key), `registration_get` (stored metadata and verified
+URL), and `tally_verify_connection` (read-only connectivity diagnostic;
+creates, reads, and returns no form data). Creation verifies the returned
+form (matching ID, `PUBLISHED` status,
 not closed) before persisting, refuses duplicates per event, and never
 reports a form as live without that verification.
 
@@ -240,6 +242,25 @@ has not been tested against a real Tally account**, so confirm the first
 real form (URL opens, questions render, submissions arrive) before relying
 on it.
 
+### Connectivity diagnostic
+
+`tally_verify_connection` checks Tally API connectivity without touching
+any form. It issues one authenticated `GET /forms` request and returns a
+minimal result: `{ connected: true }`, an authentication failure
+(`tally_auth`), a missing-configuration report (`tally_not_configured`),
+or another connection error (`tally_rate_limited`, `tally_timeout`,
+`tally_unavailable`, `tally_malformed`). Safety guarantees:
+
+- Read-only: a single `GET` against the documented form-listing endpoint.
+  No form is created, published, updated, or deleted.
+- Minimal output: the listing body is discarded, never stored or returned.
+  Responses carry no form names, IDs, submissions, or personal data.
+- The API key travels only as an `Authorization` header and never appears
+  in the result, logs, or errors.
+- It takes no arguments and needs no event, so it works before any form
+  exists. A success proves the key is accepted; it does not prove a
+  specific form's URL works — verify each published URL by opening it.
+
 ## Local MCP server (development checkout)
 
 The local stdio MCP adapter exposes the persistent application service; it does not run an autonomous agent or perform external actions. Set an explicit database path, then start it:
@@ -250,7 +271,7 @@ CAMPUS_EVENT_DB_PATH=./data/campus-events.sqlite npm run mcp
 
 On Windows PowerShell: `$env:CAMPUS_EVENT_DB_PATH = '.\\data\\campus-events.sqlite'; npm run mcp`.
 
-Configure a compatible MCP client to launch `node`, with arguments `dist/scripts/run-mcp.js`, and the `CAMPUS_EVENT_DB_PATH` environment variable (plus `TALLY_API_KEY` to enable live form creation; without it, `registration_create` reports `tally_not_configured` while drafting and retrieval keep working). The available tools are `event_create`, `event_get`, `event_update_facts`, `task_create`, `task_submit_result`, `task_transition`, `budget_validate`, `event_list_tasks`, `approval_request`, `approval_record_decision`, `artifact_get`, `registration_draft`, `registration_create`, and `registration_get`. Logs go to stderr; stdout is reserved for MCP protocol traffic.
+Configure a compatible MCP client to launch `node`, with arguments `dist/scripts/run-mcp.js`, and the `CAMPUS_EVENT_DB_PATH` environment variable (plus `TALLY_API_KEY` to enable live form creation; without it, `registration_create` reports `tally_not_configured` while drafting and retrieval keep working). The available tools are `event_create`, `event_get`, `event_update_facts`, `task_create`, `task_submit_result`, `task_transition`, `budget_validate`, `event_list_tasks`, `approval_request`, `approval_record_decision`, `artifact_get`, `registration_draft`, `registration_create`, `registration_get`, and `tally_verify_connection`. Logs go to stderr; stdout is reserved for MCP protocol traffic.
 
 ## Tests
 

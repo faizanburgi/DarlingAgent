@@ -139,6 +139,11 @@ function registerTools(server: McpServer, service: EventApplicationService, regi
   server.registerTool("registration_get", {
     title: "Get registration forms", description: "Read-only: retrieve stored Tally registration form metadata and verified URLs for an event.", inputSchema: z.object({ eventId: id })
   }, async ({ eventId }) => result(await registration.getRegistrations(eventId), "Registration forms retrieved."));
+
+  server.registerTool("tally_verify_connection", {
+    title: "Verify Tally connectivity", description: "Read-only: verify Tally API connectivity with an authenticated form-listing request. Creates, modifies, and reads no form data; returns only the connection result.",
+    inputSchema: z.object({})
+  }, async () => result(await registration.verifyTallyConnection(), "Tally connectivity verified."));
 }
 
 function result<T>(outcome: ServiceResult<T>, success: string) {

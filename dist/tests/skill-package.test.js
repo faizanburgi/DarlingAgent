@@ -41,7 +41,7 @@ test("skill documents the MCP tools without overstating them", async () => {
         "event_create", "event_get", "event_update_facts", "task_create", "task_submit_result",
         "task_transition", "budget_validate", "event_list_tasks", "approval_request",
         "approval_record_decision", "artifact_get", "registration_draft", "registration_create",
-        "registration_get"
+        "registration_get", "tally_verify_connection"
     ]) {
         assert.ok(source.includes(tool), `skill must document the ${tool} tool`);
     }
