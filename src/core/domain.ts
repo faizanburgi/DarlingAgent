@@ -66,6 +66,37 @@ export interface PersistedTask {
   status: TaskStatus;
 }
 
+/** A sourced event fact.  Facts remain facts/estimates; they are never promoted by inference. */
+export interface PersistedEventFact {
+  id: string;
+  revision: number;
+  eventId: string;
+  field: string;
+  value: string;
+  evidence: string;
+  status: "estimate" | "confirmed" | "conflicting";
+}
+
+/** Structured output returned by one specialist for one task. */
+export interface PersistedSpecialistResult {
+  id: string;
+  revision: number;
+  eventId: string;
+  taskId: string;
+  specialist: string;
+  result: Record<string, unknown>;
+  evidence: string[];
+  unresolvedIssues: string[];
+}
+
+/** A dated validation snapshot, deliberately separate from the workflow state. */
+export interface PersistedValidation {
+  id: string;
+  revision: number;
+  eventId: string;
+  checks: ValidationCheck[];
+}
+
 /** A gate for a consequential action; approval is never inferred from task state. */
 export interface PersistedApproval {
   id: string;

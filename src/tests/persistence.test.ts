@@ -16,6 +16,7 @@ import type {
 /** Test-only double: it validates the port contract but is not a storage adapter. */
 class InMemoryVersionedRepository<T extends VersionedRecord> implements VersionedRepository<T> {
   private readonly records = new Map<string, T>();
+  private readonly taskDependencies = new Map<string, string[]>();
 
   async get(id: string): Promise<T | undefined> {
     const record = this.records.get(id);
@@ -36,6 +37,24 @@ class InMemoryVersionedRepository<T extends VersionedRecord> implements Versione
     const stored = { ...structuredClone(record), revision: current.revision + 1 } as T;
     this.records.set(stored.id, stored);
     return { ok: true, record: structuredClone(stored) };
+  }
+
+  async listByEvent(eventId: string): Promise<T[]> {
+    return [...this.records.values()].filter((record) => (record as T & { eventId?: string }).eventId === eventId).map((record) => structuredClone(record));
+  }
+
+  async dependencies(taskId: string): Promise<string[]> {
+    return [...(this.taskDependencies.get(taskId) ?? [])];
+  }
+
+  async setDependencies(taskId: string, dependencyIds: string[]): Promise<void> {
+    this.taskDependencies.set(taskId, [...dependencyIds]);
+  }
+
+  async createWithDependencies(record: PersistedTask, dependencyIds: string[]): Promise<CreateResult<PersistedTask>> {
+    const result = await this.create(record as unknown as T);
+    if (result.ok) this.taskDependencies.set(record.id, [...dependencyIds]);
+    return result as unknown as CreateResult<PersistedTask>;
   }
 }
 

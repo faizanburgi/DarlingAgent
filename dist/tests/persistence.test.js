@@ -4,6 +4,7 @@ import { preparePrototypeWorkflow } from "../core/application.js";
 /** Test-only double: it validates the port contract but is not a storage adapter. */
 class InMemoryVersionedRepository {
     records = new Map();
+    taskDependencies = new Map();
     async get(id) {
         const record = this.records.get(id);
         return record === undefined ? undefined : structuredClone(record);
@@ -24,6 +25,21 @@ class InMemoryVersionedRepository {
         const stored = { ...structuredClone(record), revision: current.revision + 1 };
         this.records.set(stored.id, stored);
         return { ok: true, record: structuredClone(stored) };
+    }
+    async listByEvent(eventId) {
+        return [...this.records.values()].filter((record) => record.eventId === eventId).map((record) => structuredClone(record));
+    }
+    async dependencies(taskId) {
+        return [...(this.taskDependencies.get(taskId) ?? [])];
+    }
+    async setDependencies(taskId, dependencyIds) {
+        this.taskDependencies.set(taskId, [...dependencyIds]);
+    }
+    async createWithDependencies(record, dependencyIds) {
+        const result = await this.create(record);
+        if (result.ok)
+            this.taskDependencies.set(record.id, [...dependencyIds]);
+        return result;
     }
 }
 const event = () => ({

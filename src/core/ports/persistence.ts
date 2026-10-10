@@ -1,4 +1,4 @@
-import type { PersistedApproval, PersistedArtifact, PersistedEvent, PersistedTask } from "../domain.js";
+import type { PersistedApproval, PersistedArtifact, PersistedEvent, PersistedEventFact, PersistedSpecialistResult, PersistedTask, PersistedValidation } from "../domain.js";
 
 export interface VersionedRecord {
   id: string;
@@ -24,6 +24,35 @@ export interface VersionedRepository<T extends VersionedRecord> {
 }
 
 export interface EventRepository extends VersionedRepository<PersistedEvent> {}
-export interface TaskRepository extends VersionedRepository<PersistedTask> {}
-export interface ApprovalRepository extends VersionedRepository<PersistedApproval> {}
-export interface ArtifactMetadataRepository extends VersionedRepository<PersistedArtifact> {}
+
+/** Event-scoped query support belongs at the persistence boundary, not in domain logic. */
+export interface EventScopedRepository<T extends VersionedRecord> extends VersionedRepository<T> {
+  listByEvent(eventId: string): Promise<T[]>;
+}
+
+export interface TaskRepository extends EventScopedRepository<PersistedTask> {
+  dependencies(taskId: string): Promise<string[]>;
+  setDependencies(taskId: string, dependencyIds: string[]): Promise<void>;
+  createWithDependencies(record: PersistedTask, dependencyIds: string[]): Promise<CreateResult<PersistedTask>>;
+}
+export interface ApprovalRepository extends EventScopedRepository<PersistedApproval> {}
+export interface ArtifactMetadataRepository extends EventScopedRepository<PersistedArtifact> {}
+export interface EventFactRepository extends EventScopedRepository<PersistedEventFact> {
+  createWithConflict(record: PersistedEventFact, conflictingFactId?: string): Promise<CreateResult<PersistedEventFact>>;
+}
+export interface SpecialistResultRepository extends EventScopedRepository<PersistedSpecialistResult> {}
+export interface ValidationRepository extends EventScopedRepository<PersistedValidation> {}
+
+export interface PersistenceTransaction {
+  transaction<T>(work: () => T): T;
+}
+
+export interface ApplicationPersistence extends PersistenceTransaction {
+  events: EventRepository;
+  tasks: TaskRepository;
+  approvals: ApprovalRepository;
+  artifacts: ArtifactMetadataRepository;
+  facts: EventFactRepository;
+  results: SpecialistResultRepository;
+  validations: ValidationRepository;
+}
